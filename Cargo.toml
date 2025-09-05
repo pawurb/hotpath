@@ -1,0 +1,8 @@
+[workspace]
+members = ["crates/hotpath-macros", "crates/hotpath"]
+resolver = "2"
+
+[workspace.dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }

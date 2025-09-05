@@ -1,0 +1,20 @@
+[package]
+name = "hotpath-macros"
+version = "0.2.0"
+edition = "2024"
+repository = "https://github.com/pawurb/hotpath"
+description = "Minimal performance profiler for Rust applications"
+readme = "../../README.md"
+license = "MIT"
+categories = ["development-tools"]
+
+[features]
+default = []
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }

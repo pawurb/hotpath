@@ -1,0 +1,13 @@
+{
+  "crates": [
+    {
+      "edition": "2024",
+      "root_module": "hotpath",
+      "deps": [],
+      "cfg": [],
+      "features": [
+        "all"
+      ]
+    }
+  ]
+}

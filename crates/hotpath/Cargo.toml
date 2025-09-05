@@ -1,0 +1,22 @@
+[package]
+name = "hotpath"
+version = "0.0.1"
+edition = "2024"
+repository = "https://github.com/pawurb/hotpath"
+description = "Minmal performance profiler for Rust applications"
+readme = "../../README.md"
+license = "MIT"
+categories = ["development-tools"]
+
+[features]
+default = []
+hotpath = []
+
+[dependencies]
+colored = { version = "3.0.0" }
+crossbeam-channel = "0.5"
+hotpath-macros = { path = "../hotpath-macros" }
+prettytable-rs = { version = "0.10.0" }
+
+[dev-dependencies]
+tokio = { version = "1.47.1", features = ["full"] }
