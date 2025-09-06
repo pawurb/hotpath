@@ -71,7 +71,7 @@ impl Drop for HotPath {
         let state = Arc::clone(&self.state);
 
         // Signal shutdown and wait for processing thread to complete
-        let (shutdown_tx, completion_rx) = {
+        let (shutdown_tx, completion_rx, end_time) = {
             let Ok(mut state_guard) = state.write() else {
                 return;
             };
@@ -81,9 +81,11 @@ impl Drop for HotPath {
             }
 
             state_guard.sender = None;
+            let end_time = Instant::now();
+
             let shutdown_tx = state_guard.shutdown_tx.take();
             let completion_rx = state_guard.completion_rx.take();
-            (shutdown_tx, completion_rx)
+            (shutdown_tx, completion_rx, end_time)
         };
 
         if let Some(tx) = shutdown_tx {
@@ -98,7 +100,7 @@ impl Drop for HotPath {
             && let Some(ref stats) = state_guard.stats
             && !stats.is_empty()
         {
-            let total_elapsed = Instant::now().duration_since(state_guard.start_time);
+            let total_elapsed = end_time.duration_since(state_guard.start_time);
             report::display_performance_summary(stats, total_elapsed, &state_guard.caller_name);
         }
     }
