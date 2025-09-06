@@ -1,5 +1,5 @@
 use colored::*;
-use prettytable::{Attr, Cell, Row, Table, color};
+use prettytable::{color, Attr, Cell, Row, Table};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -9,44 +9,43 @@ pub fn display_performance_summary(
     stats: &HashMap<String, FunctionStats>,
     total_elapsed: Duration,
     caller_name: &str,
+    percentiles: &[u8],
 ) {
     let use_colors = std::env::var("NO_COLOR").is_err();
 
     let mut table = Table::new();
+    // Build header row dynamically based on selected percentiles
+    let mut header_cells = vec![
+        Cell::new("Function"),
+        Cell::new("Calls"),
+        Cell::new("Min"),
+        Cell::new("Max"),
+        Cell::new("Avg"),
+    ];
+
+    // Add percentile columns
+    for &p in percentiles {
+        header_cells.push(Cell::new(&format!("P{}", p)));
+    }
+
+    header_cells.push(Cell::new("Total"));
+    header_cells.push(Cell::new("% Total"));
+
     if use_colors {
-        table.add_row(Row::new(vec![
-            Cell::new("Function")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-            Cell::new("Calls")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-            Cell::new("Min")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-            Cell::new("Max")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-            Cell::new("Avg")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-            Cell::new("Total")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-            Cell::new("% Total")
-                .with_style(Attr::Bold)
-                .with_style(Attr::ForegroundColor(color::CYAN)),
-        ]));
+        let styled_cells: Vec<Cell> = header_cells
+            .into_iter()
+            .map(|cell| {
+                cell.with_style(Attr::Bold)
+                    .with_style(Attr::ForegroundColor(color::CYAN))
+            })
+            .collect();
+        table.add_row(Row::new(styled_cells));
     } else {
-        table.add_row(Row::new(vec![
-            Cell::new("Function").with_style(Attr::Bold),
-            Cell::new("Calls").with_style(Attr::Bold),
-            Cell::new("Min").with_style(Attr::Bold),
-            Cell::new("Max").with_style(Attr::Bold),
-            Cell::new("Avg").with_style(Attr::Bold),
-            Cell::new("Total").with_style(Attr::Bold),
-            Cell::new("% Total").with_style(Attr::Bold),
-        ]));
+        let styled_cells: Vec<Cell> = header_cells
+            .into_iter()
+            .map(|cell| cell.with_style(Attr::Bold))
+            .collect();
+        table.add_row(Row::new(styled_cells));
     }
 
     let mut sorted_stats: Vec<_> = stats.iter().collect();
@@ -80,19 +79,33 @@ pub fn display_performance_summary(
             function_name.to_string()
         };
 
-        table.add_row(Row::new(vec![
+        let mut row_cells = vec![
             Cell::new(&short_name),
             Cell::new(&stats.count.to_string()),
             Cell::new(&format!("{:.2?}", stats.min_duration)),
             Cell::new(&format!("{:.2?}", stats.max_duration)),
             Cell::new(&format!("{:.2?}", stats.avg_duration())),
-            Cell::new(&format!("{:.2?}", stats.total_duration)),
-            Cell::new(&format!("{percentage:.2}%")).with_style(Attr::Bold),
-        ]));
+        ];
+
+        // Add percentile values based on selected percentiles
+        if !percentiles.is_empty() {
+            let mut sorted_measurements = stats.measurements.clone();
+            sorted_measurements.sort();
+
+            for &p in percentiles {
+                let value = stats.percentile(p as f64, &sorted_measurements);
+                row_cells.push(Cell::new(&format!("{:.2?}", value)));
+            }
+        }
+
+        row_cells.push(Cell::new(&format!("{:.2?}", stats.total_duration)));
+        row_cells.push(Cell::new(&format!("{percentage:.2}%")).with_style(Attr::Bold));
+
+        table.add_row(Row::new(row_cells));
     }
 
     let title = format!(
-        "\n{} Performance Summary from {} (Total time: {:.2?}):",
+        "\n{} Performance summary from {} (Total time: {:.2?}):",
         "[hotpath]".blue().bold(),
         caller_name.yellow().bold(),
         total_elapsed

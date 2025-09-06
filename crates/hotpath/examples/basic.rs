@@ -1,31 +1,26 @@
 use std::time::Duration;
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn sync_function() {
-    std::thread::sleep(Duration::from_millis(100));
+fn sync_function(sleep: u64) {
+    std::thread::sleep(Duration::from_nanos(sleep));
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-async fn async_function() {
-    tokio::time::sleep(Duration::from_millis(150)).await;
+async fn async_function(sleep: u64) {
+    tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
 #[tokio::main]
-#[cfg_attr(feature = "hotpath", hotpath::main)]
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [99]))]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    sync_function();
-    async_function().await;
-
-    // Measure code blocks with static labels
-    #[cfg(feature = "hotpath")]
-    hotpath::measure_block!("sync_block", {
-        std::thread::sleep(Duration::from_millis(100))
-    });
-
-    #[cfg(feature = "hotpath")]
-    hotpath::measure_block!("async_block", {
-        tokio::time::sleep(Duration::from_millis(150)).await;
-    });
+    for i in 0..100 {
+        sync_function(i);
+        async_function(i * 2).await;
+        #[cfg(feature = "hotpath")]
+        hotpath::measure_block!("custom_block", {
+            std::thread::sleep(Duration::from_nanos(i * 3))
+        });
+    }
 
     Ok(())
 }
