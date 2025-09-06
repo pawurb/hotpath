@@ -1,9 +1,9 @@
-# hotpath - track and profile Rust bottlenecks
+# hotpath - find and profile Rust bottlenecks
 [![Latest Version](https://img.shields.io/crates/v/hotpath.svg)](https://crates.io/crates/hotpath) [![GH Actions](https://github.com/pawurb/hotpath/actions/workflows/ci.yml/badge.svg)](https://github.com/pawurb/hotpath/actions)
 
 ![Report](hotpath-report.png)
 
-A lightweight Rust performance measurement library with background processing and statistics aggregation. Instrument any function or code block to quickly find bottlenecks and profile calls with minimal overhead. 
+A lightweight Rust performance profiling library with background processing and statistic aggregations. Instrument any function or code block to quickly find bottlenecks and profile calls with minimal overhead. See each label's share of total runtime to easily focus optimizations.
 
 ## Features
 
@@ -41,6 +41,7 @@ async fn async_function() {
 
 #[tokio::main]
 async fn main() {
+    // Prints report when _hotpath guard is dropped
     #[cfg(feature = "hotpath")]
     let _hotpath = hotpath::init!();
 
@@ -93,7 +94,7 @@ Output:
 
 ## API
 
-`hotpath::init!()`
+`let _hotpath = hotpath::init!()`
 
 Macro that initializes the background measurement processing thread. Returns a `_hotpath` guard that should be kept alive for the duration of measurements.
 
@@ -103,4 +104,4 @@ Macro that measures the execution time of a code block with a static string labe
 
 `#[cfg_attr(feature = "hotpath", hotpath::measure)]`
 
-Attribute macro that instruments functions to send timing measurements to the background processor.
+An opt-in attribute macro that instruments functions to send timing measurements to the background processor.
