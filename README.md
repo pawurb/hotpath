@@ -1,16 +1,16 @@
 # hotpath - find and profile Rust bottlenecks
 [![Latest Version](https://img.shields.io/crates/v/hotpath.svg)](https://crates.io/crates/hotpath) [![GH Actions](https://github.com/pawurb/hotpath/actions/workflows/ci.yml/badge.svg)](https://github.com/pawurb/hotpath/actions)
 
-![Report](hotpath-report.png)
+![Report](hotpath-report2.png)
 
 A lightweight Rust performance profiling library with background processing and statistic aggregations. Instrument any function or code block to quickly find bottlenecks and profile calls with minimal overhead. See each label's share of total runtime to easily focus optimizations.
 
 ## Features
 
 - **Opt-in / zero cost when disabled** (gate with a feature flag)
-- **Low-overhead profiling** for functions and code blocks (bounded queue + background thread)
-- **Stats per label:** min, max, avg, total, calls, and % of total
-- Works in both **sync** and **async** code
+- **Low-overhead profiling** for functions and code blocks
+- **Stats per label:** min, max, avg, total, calls, % of total and configurable percentiles
+- Works for both **sync** and **async** code
 
 ## Quick Start
 
@@ -39,23 +39,22 @@ async fn async_function() {
     tokio::time::sleep(Duration::from_millis(150)).await;
 }
 
+// When using with tokio, place the #[tokio::main] first
 #[tokio::main]
-#[cfg_attr(feature = "hotpath", hotpath::main)]
+// You can configure any percentile between 1 and 99
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [99]))]
 async fn main() {
-    // Measured functions will automatically send metrics
-    sync_function();
-    async_function().await;
-    
-    // Measure code blocks with static labels
-    #[cfg(feature = "hotpath")]
-    hotpath::measure_block!("sync_block", {
-        std::thread::sleep(Duration::from_millis(100))
-    });
+    for i in 0..100 {
+        // Measured functions will automatically send metrics
+        sync_function(i);
+        async_function(i * 2).await;
 
-    #[cfg(feature = "hotpath")]
-    hotpath::measure_block!("async_block", {
-        tokio::time::sleep(Duration::from_millis(150)).await;
-    });
+        // Measure code blocks with static labels
+        #[cfg(feature = "hotpath")]
+        hotpath::measure_block!("custom_block", {
+            std::thread::sleep(Duration::from_nanos(i * 3))
+        });
+    }
 }
 ```
 
@@ -67,34 +66,31 @@ cargo run --features=hotpath
 
 Output:
 ```
-[hotpath] Performance Summary from basic::main (Total time: 512.97ms):
-+-----------------------+-------+----------+----------+----------+----------+---------+
-| Function              | Calls | Min      | Max      | Avg      | Total    | % Total |
-+-----------------------+-------+----------+----------+----------+----------+---------+
-| async_block           | 1     | 152.02ms | 152.02ms | 152.02ms | 152.02ms | 29.63%  |
-+-----------------------+-------+----------+----------+----------+----------+---------+
-| basic::async_function | 1     | 151.22ms | 151.22ms | 151.22ms | 151.22ms | 29.48%  |
-+-----------------------+-------+----------+----------+----------+----------+---------+
-| basic::sync_function  | 1     | 105.03ms | 105.03ms | 105.03ms | 105.03ms | 20.47%  |
-+-----------------------+-------+----------+----------+----------+----------+---------+
-| sync_block            | 1     | 104.38ms | 104.38ms | 104.38ms | 104.38ms | 20.35%  |
-+-----------------------+-------+----------+----------+----------+----------+---------+
+[hotpath] Performance Summary from basic::main (Total time: 126.86ms):
++-----------------------+-------+----------+---------+---------+---------+----------+---------+
+| Function              | Calls | Min      | Max     | Avg     | P99     | Total    | % Total |
++-----------------------+-------+----------+---------+---------+---------+----------+---------+
+| basic::async_function | 100   | 58.50µs  | 1.30ms  | 1.18ms  | 1.30ms  | 118.48ms | 93.40%  |
++-----------------------+-------+----------+---------+---------+---------+----------+---------+
+| custom_block          | 100   | 125.00ns | 67.04µs | 21.28µs | 42.63µs | 2.13ms   | 1.68%   |
++-----------------------+-------+----------+---------+---------+---------+----------+---------+
+| basic::sync_function  | 100   | 250.00ns | 44.54µs | 20.89µs | 37.67µs | 2.09ms   | 1.65%   |
++-----------------------+-------+----------+---------+---------+---------+----------+---------+
 ```
 
 ## How It Works
 
 1. `#[cfg_attr(feature = "hotpath", hotpath::main)]` - Macro that initializes the background measurement processing
-2. `#[cfg_attr(feature = "hotpath", hotpath::measure)]` - Proc-macro that wraps functions with timing code
+2. `#[cfg_attr(feature = "hotpath", hotpath::measure)]` - Macro that wraps functions with timing code
 3. **Background thread** - Measurements are sent to a dedicated worker thread via bounded channel
-4. **Non-blocking** - Function execution continues immediately after sending measurement
-5. **Statistics aggregation** - Worker thread maintains running statistics for each function/code block
-6. **Automatic reporting** - Performance summary displayed when the program exits
+4. **Statistics aggregation** - Worker thread maintains running statistics for each function/code block
+5. **Automatic reporting** - Performance summary displayed when the program exits
 
 ## API
 
-`#[cfg_attr(feature = "hotpath", hotpath::main)]`
+`#[cfg_attr(feature = "hotpath", hotpath::main]`
 
-Attribute macro that initializes the background measurement processing when applied to your main function. Can only be used once per program.
+Attribute macro that initializes the background measurement processing when applied to your main function. Can only be used once per program. 
 
 `#[cfg_attr(feature = "hotpath", hotpath::measure)]`
 
@@ -104,3 +100,16 @@ An opt-in attribute macro that instruments functions to send timing measurements
 
 Macro that measures the execution time of a code block with a static string label.
 
+### Percentiles Support
+
+By default, `hotpath` displays P95 percentile in the performance summary. You can customize which percentiles to display using the `percentiles` parameter:
+
+```rust
+#[tokio::main]
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 75, 90, 95, 99]))]
+async fn main() {
+    // Your code here
+}
+```
+
+For multiple measurements of the same function or code block, percentiles help identify performance distribution patterns.

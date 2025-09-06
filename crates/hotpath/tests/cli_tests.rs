@@ -15,10 +15,12 @@ pub mod tests {
         );
 
         let expected = [
-            "async_block",
+            "custom_block",
             "basic::sync_function",
-            "sync_function",
             "basic::async_function",
+            "P99",
+            "Total",
+            "% Total",
         ];
 
         let stdout = String::from_utf8_lossy(&output.stdout);

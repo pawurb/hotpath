@@ -20,6 +20,7 @@ pub struct FunctionStats {
     pub max_duration: Duration,
     pub total_duration: Duration,
     pub count: u64,
+    pub measurements: Vec<Duration>,
 }
 
 impl FunctionStats {
@@ -29,6 +30,7 @@ impl FunctionStats {
             max_duration: duration,
             total_duration: duration,
             count: 1,
+            measurements: vec![duration],
         }
     }
 
@@ -37,6 +39,7 @@ impl FunctionStats {
         self.max_duration = self.max_duration.max(duration);
         self.total_duration += duration;
         self.count += 1;
+        self.measurements.push(duration);
     }
 
     pub fn avg_duration(&self) -> Duration {
@@ -47,6 +50,18 @@ impl FunctionStats {
         } else {
             Duration::ZERO
         }
+    }
+
+    pub fn percentile(&self, percentile: f64, sorted_measurements: &[Duration]) -> Duration {
+        if sorted_measurements.is_empty() {
+            return Duration::ZERO;
+        }
+
+        let pct = percentile.clamp(1.0, 99.0);
+
+        let index = ((pct / 100.0) * (sorted_measurements.len() as f64 - 1.0)).floor() as usize;
+
+        sorted_measurements[index]
     }
 }
 
@@ -80,6 +95,7 @@ struct HotPathState {
     stats: Option<HashMap<String, FunctionStats>>, // Will be populated by worker at shutdown
     start_time: Instant,
     caller_name: String,
+    percentiles: Vec<u8>,
 }
 
 static HOTPATH_STATE: OnceLock<Arc<RwLock<HotPathState>>> = OnceLock::new();
@@ -119,7 +135,12 @@ impl Drop for HotPath {
             && !stats.is_empty()
         {
             let total_elapsed = end_time.duration_since(state_guard.start_time);
-            report::display_performance_summary(stats, total_elapsed, &state_guard.caller_name);
+            report::display_performance_summary(
+                stats,
+                total_elapsed,
+                &state_guard.caller_name,
+                &state_guard.percentiles,
+            );
         }
     }
 }
@@ -132,25 +153,12 @@ fn process_measurement(stats: &mut HashMap<String, FunctionStats>, m: Measuremen
     }
 }
 
-#[macro_export]
-macro_rules! init {
-    () => {{
-        fn __caller_fn() {}
-        let caller_name = std::any::type_name_of_val(&__caller_fn);
-        let caller_name = caller_name
-            .strip_suffix("::__caller_fn")
-            .unwrap_or(caller_name)
-            .replace("::{{closure}}", "")
-            .to_string();
-
-        $crate::init_with_caller(caller_name)
-    }};
-}
-
-pub fn init_with_caller(caller_name: String) -> HotPath {
+pub fn init(caller_name: String, percentiles: &[u8]) -> HotPath {
     if HOTPATH_STATE.get().is_some() {
         panic!("hotpath::init() must be called only once");
     }
+
+    let percentiles = percentiles.to_vec();
 
     let state = HOTPATH_STATE.get_or_init(|| {
         let (tx, rx) = bounded::<Measurement>(10000);
@@ -165,6 +173,7 @@ pub fn init_with_caller(caller_name: String) -> HotPath {
             stats: None, // Will be populated by worker at shutdown
             start_time,
             caller_name,
+            percentiles,
         }));
 
         let state_clone = Arc::clone(&state_arc);
