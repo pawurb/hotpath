@@ -50,6 +50,29 @@ impl FunctionStats {
     }
 }
 
+pub struct MeasureGuard {
+    name: &'static str,
+    start: Instant,
+}
+
+impl MeasureGuard {
+    #[inline]
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            start: Instant::now(),
+        }
+    }
+}
+
+impl Drop for MeasureGuard {
+    #[inline]
+    fn drop(&mut self) {
+        let dur = self.start.elapsed();
+        crate::send_measurement(self.name, dur);
+    }
+}
+
 struct HotPathState {
     sender: Option<Sender<Measurement>>,
     shutdown_tx: Option<Sender<()>>,

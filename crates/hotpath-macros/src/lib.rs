@@ -38,26 +38,16 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #vis #sig {
                     async {
-                        let __start = std::time::Instant::now();
-                        let __result = { #block };
-                        let __elapsed = __start.elapsed();
-
-                        hotpath::send_measurement(concat!(module_path!(), "::", #name), __elapsed);
-
-                        __result
+                        let _guard = hotpath::MeasureGuard::new(concat!(module_path!(), "::", #name));
+                        #block
                     }.await
                 }
             }
         } else {
             quote! {
                 #vis #sig {
-                    let __start = std::time::Instant::now();
-                    let __result = { #block };
-                    let __elapsed = __start.elapsed();
-
-                    hotpath::send_measurement(concat!(module_path!(), "::", #name), __elapsed);
-
-                    __result
+                    let _guard = hotpath::MeasureGuard::new(concat!(module_path!(), "::", #name));
+                    #block
                 }
             }
         };

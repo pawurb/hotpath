@@ -1,0 +1,40 @@
+use std::time::Duration;
+
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
+fn early_return() {
+    // Work before returning…
+    std::thread::sleep(Duration::from_millis(10));
+
+    if true {
+        return;
+    }
+
+    std::thread::sleep(Duration::from_millis(10));
+}
+
+fn may_fail(flag: bool) -> Result<(), &'static str> {
+    std::thread::sleep(Duration::from_millis(5));
+    if flag { Err("boom") } else { Ok(()) }
+}
+
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
+fn propagates_error() -> Result<(), &'static str> {
+    may_fail(true)?;
+    std::thread::sleep(Duration::from_millis(10));
+    Ok(())
+}
+
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
+fn normal_path() {
+    std::thread::sleep(Duration::from_millis(15));
+}
+
+#[tokio::main]
+#[cfg_attr(feature = "hotpath", hotpath::main)]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    early_return();
+    let _ = propagates_error();
+    normal_path();
+
+    Ok(())
+}
