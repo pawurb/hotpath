@@ -1,6 +1,6 @@
 [package]
 name = "hotpath"
-version = "0.0.1"
+version = "0.2.0"
 edition = "2024"
 repository = "https://github.com/pawurb/hotpath"
 description = "Minmal performance profiler for Rust applications"
@@ -15,7 +15,7 @@ hotpath = []
 [dependencies]
 colored = { version = "3.0.0" }
 crossbeam-channel = "0.5"
-hotpath-macros = { path = "../hotpath-macros" }
+hotpath-macros = { version = "0.2.0" }
 prettytable-rs = { version = "0.10.0" }
 
 [dev-dependencies]

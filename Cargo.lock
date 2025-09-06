@@ -153,11 +153,11 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
 name = "hotpath"
-version = "0.0.1"
+version = "0.2.0"
 dependencies = [
  "colored",
  "crossbeam-channel",
- "hotpath-macros",
+ "hotpath-macros 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "prettytable-rs",
  "tokio",
 ]
@@ -165,6 +165,17 @@ dependencies = [
 [[package]]
 name = "hotpath-macros"
 version = "0.2.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "hotpath-macros"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c0a20824b6aa3b440269c423da4ec4d21aa283c7b9c2c865f0d2203ace7f288"
 dependencies = [
  "proc-macro2",
  "quote",
