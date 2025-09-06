@@ -15,8 +15,8 @@ hotpath = []
 [dependencies]
 colored = { version = "3.0.0" }
 crossbeam-channel = "0.5"
-# hotpath-macros = { version = "0.2.2" }
-hotpath-macros = { path = "../hotpath-macros" }
+hotpath-macros = { version = "0.2.2" }
+# hotpath-macros = { path = "../hotpath-macros" }
 prettytable-rs = { version = "0.10.0" }
 
 [dev-dependencies]
