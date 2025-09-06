@@ -30,13 +30,13 @@ hotpath = ["dep:hotpath"]
 use std::time::Duration;
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn sync_function() {
-    std::thread::sleep(Duration::from_millis(100));
+fn sync_function(sleep: u64) {
+    std::thread::sleep(Duration::from_nanos(sleep));
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-async fn async_function() {
-    tokio::time::sleep(Duration::from_millis(150)).await;
+async fn async_function(sleep: u64) {
+    tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
 // When using with tokio, place the #[tokio::main] first

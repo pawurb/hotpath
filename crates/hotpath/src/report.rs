@@ -116,7 +116,7 @@ pub fn display_performance_summary(
 
 pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
     use colored::*;
-    
+
     let title = format!(
         "\n{} No measurements recorded from {} (Total time: {:.2?})",
         "[hotpath]".blue().bold(),
@@ -125,18 +125,27 @@ pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &st
     );
     println!("{title}");
     println!();
-    println!("To start measuring performance, add the {} macro to your functions:", "#[hotpath::measure]".cyan().bold());
+    println!(
+        "To start measuring performance, add the {} macro to your functions:",
+        "#[hotpath::measure]".cyan().bold()
+    );
     println!();
-    println!("  {}",  "#[cfg_attr(feature = \"hotpath\", hotpath::measure)]".cyan());
-    println!("  {}",  "fn your_function() {".dimmed());
-    println!("  {}",  "    // your code here".dimmed());
-    println!("  {}",  "}".dimmed());
+    println!(
+        "  {}",
+        "#[cfg_attr(feature = \"hotpath\", hotpath::measure)]".cyan()
+    );
+    println!("  {}", "fn your_function() {".dimmed());
+    println!("  {}", "    // your code here".dimmed());
+    println!("  {}", "}".dimmed());
     println!();
-    println!("Or use {} to measure code blocks:", "hotpath::measure_block!".cyan().bold());
+    println!(
+        "Or use {} to measure code blocks:",
+        "hotpath::measure_block!".cyan().bold()
+    );
     println!();
-    println!("  {}",  "#[cfg(feature = \"hotpath\")]".cyan());
-    println!("  {}",  "hotpath::measure_block!(\"label\", {".cyan());
-    println!("  {}",  "    // your code here".dimmed());
-    println!("  {}",  "});".cyan());
+    println!("  {}", "#[cfg(feature = \"hotpath\")]".cyan());
+    println!("  {}", "hotpath::measure_block!(\"label\", {".cyan());
+    println!("  {}", "    // your code here".dimmed());
+    println!("  {}", "});".cyan());
     println!();
 }
