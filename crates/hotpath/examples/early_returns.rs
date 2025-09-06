@@ -14,7 +14,11 @@ fn early_return() {
 
 fn may_fail(flag: bool) -> Result<(), &'static str> {
     std::thread::sleep(Duration::from_millis(5));
-    if flag { Err("boom") } else { Ok(()) }
+    if flag {
+        Err("boom")
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
@@ -29,9 +33,8 @@ fn normal_path() {
     std::thread::sleep(Duration::from_millis(15));
 }
 
-#[tokio::main]
 #[cfg_attr(feature = "hotpath", hotpath::main)]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     early_return();
     let _ = propagates_error();
     normal_path();

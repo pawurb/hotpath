@@ -132,15 +132,18 @@ impl Drop for HotPath {
 
         if let Ok(state_guard) = state.read()
             && let Some(ref stats) = state_guard.stats
-            && !stats.is_empty()
         {
             let total_elapsed = end_time.duration_since(state_guard.start_time);
-            report::display_performance_summary(
-                stats,
-                total_elapsed,
-                &state_guard.caller_name,
-                &state_guard.percentiles,
-            );
+            if stats.is_empty() {
+                report::display_no_measurements_message(total_elapsed, &state_guard.caller_name);
+            } else {
+                report::display_performance_summary(
+                    stats,
+                    total_elapsed,
+                    &state_guard.caller_name,
+                    &state_guard.percentiles,
+                );
+            }
         }
     }
 }
