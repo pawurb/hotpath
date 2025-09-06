@@ -1,4 +1,4 @@
-pub use hotpath_macros::measure;
+pub use hotpath_macros::{main, measure};
 
 use crossbeam_channel::{Receiver, Sender, bounded, select};
 use std::collections::HashMap;
@@ -57,7 +57,6 @@ struct HotPathState {
     stats: Option<HashMap<String, FunctionStats>>, // Will be populated by worker at shutdown
     start_time: Instant,
     caller_name: String,
-    shutdown_initiated: bool,
 }
 
 static HOTPATH_STATE: OnceLock<Arc<RwLock<HotPathState>>> = OnceLock::new();
@@ -75,10 +74,6 @@ impl Drop for HotPath {
             let Ok(mut state_guard) = state.write() else {
                 return;
             };
-
-            if state_guard.shutdown_initiated {
-                unreachable!();
-            }
 
             state_guard.sender = None;
             let end_time = Instant::now();
@@ -147,7 +142,6 @@ pub fn init_with_caller(caller_name: String) -> HotPath {
             stats: None, // Will be populated by worker at shutdown
             start_time,
             caller_name,
-            shutdown_initiated: false,
         }));
 
         let state_clone = Arc::clone(&state_arc);

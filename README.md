@@ -40,11 +40,8 @@ async fn async_function() {
 }
 
 #[tokio::main]
+#[cfg_attr(feature = "hotpath", hotpath::main)]
 async fn main() {
-    // Prints report when _hotpath guard is dropped
-    #[cfg(feature = "hotpath")]
-    let _hotpath = hotpath::init!();
-
     // Measured functions will automatically send metrics
     sync_function();
     async_function().await;
@@ -86,22 +83,24 @@ Output:
 
 ## How It Works
 
-1. `#[cfg_attr(feature = "hotpath", hotpath::measure)]` - Proc-macro that wraps functions with timing code
-2. **Background thread** - Measurements are sent to a dedicated worker thread via bounded channel
-3. **Non-blocking** - Function execution continues immediately after sending measurement
-4. **Statistics aggregation** - Worker thread maintains running statistics for each function/code block
-5. **Simple config** - Performance summary displayed automatically when `_hotpath` guard is dropped
+1. `#[cfg_attr(feature = "hotpath", hotpath::main)]` - Macro that initializes the background measurement processing
+2. `#[cfg_attr(feature = "hotpath", hotpath::measure)]` - Proc-macro that wraps functions with timing code
+3. **Background thread** - Measurements are sent to a dedicated worker thread via bounded channel
+4. **Non-blocking** - Function execution continues immediately after sending measurement
+5. **Statistics aggregation** - Worker thread maintains running statistics for each function/code block
+6. **Automatic reporting** - Performance summary displayed when the program exits
 
 ## API
 
-`let _hotpath = hotpath::init!()`
+`#[cfg_attr(feature = "hotpath", hotpath::main)]`
 
-Macro that initializes the background measurement processing thread. Returns a `_hotpath` guard that should be kept alive for the duration of measurements.
+Attribute macro that initializes the background measurement processing when applied to your main function. Can only be used once per program.
+
+`#[cfg_attr(feature = "hotpath", hotpath::measure)]`
+
+An opt-in attribute macro that instruments functions to send timing measurements to the background processor.
 
 `hotpath::measure_block!(label, expr)`
 
 Macro that measures the execution time of a code block with a static string label.
 
-`#[cfg_attr(feature = "hotpath", hotpath::measure)]`
-
-An opt-in attribute macro that instruments functions to send timing measurements to the background processor.
