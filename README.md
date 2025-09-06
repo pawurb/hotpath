@@ -8,7 +8,7 @@ A lightweight Rust performance profiling library with background processing and 
 ## Features
 
 - **Opt-in / zero cost when disabled** (gate with a feature flag)
-- **Zero-overhead profiling** for functions and code blocks (bounded queue + background thread)
+- **Low-overhead profiling** for functions and code blocks (bounded queue + background thread)
 - **Stats per label:** min, max, avg, total, calls, and % of total
 - Works in both **sync** and **async** code
 
@@ -90,7 +90,7 @@ Output:
 2. **Background thread** - Measurements are sent to a dedicated worker thread via bounded channel
 3. **Non-blocking** - Function execution continues immediately after sending measurement
 4. **Statistics aggregation** - Worker thread maintains running statistics for each function/code block
-5. **Seamless cleanup** - Performance summary displayed automatically when `_hotpath` guard is dropped
+5. **Simple config** - Performance summary displayed automatically when `_hotpath` guard is dropped
 
 ## API
 

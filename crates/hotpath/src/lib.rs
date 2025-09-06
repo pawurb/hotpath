@@ -68,21 +68,17 @@ pub struct HotPath {
 
 impl Drop for HotPath {
     fn drop(&mut self) {
-        // Decrement ref count
         let state = Arc::clone(&self.state);
 
         // Signal shutdown and wait for processing thread to complete
         let (shutdown_tx, completion_rx) = {
             let Ok(mut state_guard) = state.write() else {
-                // If state is poisoned, just return
                 return;
             };
 
-            // Make shutdown idempotent
             if state_guard.shutdown_initiated {
-                return;
+                unreachable!();
             }
-            state_guard.shutdown_initiated = true;
 
             state_guard.sender = None;
             let shutdown_tx = state_guard.shutdown_tx.take();
@@ -90,17 +86,14 @@ impl Drop for HotPath {
             (shutdown_tx, completion_rx)
         };
 
-        // Send shutdown signal (non-panicking)
         if let Some(tx) = shutdown_tx {
             let _ = tx.send(());
         }
 
-        // Wait for processing thread to finish (non-panicking)
         if let Some(rx) = completion_rx {
             let _ = rx.recv();
         }
 
-        // Display summary (non-panicking)
         if let Ok(state_guard) = state.read()
             && let Some(ref stats) = state_guard.stats
             && !stats.is_empty()

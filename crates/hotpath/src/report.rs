@@ -79,7 +79,7 @@ pub fn display_performance_summary(
         } else {
             function_name.to_string()
         };
-        
+
         table.add_row(Row::new(vec![
             Cell::new(&short_name),
             Cell::new(&stats.count.to_string()),
