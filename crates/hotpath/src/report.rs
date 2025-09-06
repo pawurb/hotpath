@@ -73,8 +73,15 @@ pub fn display_performance_summary(
             0.0
         };
 
+        let parts: Vec<&str> = function_name.split("::").collect();
+        let short_name = if parts.len() > 2 {
+            parts[parts.len() - 2..].join("::")
+        } else {
+            function_name.to_string()
+        };
+        
         table.add_row(Row::new(vec![
-            Cell::new(function_name),
+            Cell::new(&short_name),
             Cell::new(&stats.count.to_string()),
             Cell::new(&format!("{:.2?}", stats.min_duration)),
             Cell::new(&format!("{:.2?}", stats.max_duration)),
