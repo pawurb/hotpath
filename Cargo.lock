@@ -153,7 +153,7 @@ checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
 
 [[package]]
 name = "hotpath"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "colored",
  "crossbeam-channel",
