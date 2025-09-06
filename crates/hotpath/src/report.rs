@@ -31,22 +31,22 @@ pub fn display_performance_summary(
     header_cells.push(Cell::new("Total"));
     header_cells.push(Cell::new("% Total"));
 
-    if use_colors {
-        let styled_cells: Vec<Cell> = header_cells
+    let styled_cells: Vec<Cell> = if use_colors {
+        header_cells
             .into_iter()
             .map(|cell| {
                 cell.with_style(Attr::Bold)
                     .with_style(Attr::ForegroundColor(color::CYAN))
             })
-            .collect();
-        table.add_row(Row::new(styled_cells));
+            .collect()
     } else {
-        let styled_cells: Vec<Cell> = header_cells
+        header_cells
             .into_iter()
             .map(|cell| cell.with_style(Attr::Bold))
-            .collect();
-        table.add_row(Row::new(styled_cells));
-    }
+            .collect()
+    };
+
+    table.add_row(Row::new(styled_cells));
 
     let mut sorted_stats: Vec<_> = stats.iter().collect();
     sorted_stats.sort_by(|(_, a), (_, b)| {
@@ -115,8 +115,6 @@ pub fn display_performance_summary(
 }
 
 pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
-    use colored::*;
-
     let title = format!(
         "\n{} No measurements recorded from {} (Total time: {:.2?})",
         "[hotpath]".blue().bold(),

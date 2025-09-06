@@ -158,7 +158,7 @@ fn process_measurement(stats: &mut HashMap<String, FunctionStats>, m: Measuremen
 
 pub fn init(caller_name: String, percentiles: &[u8]) -> HotPath {
     if HOTPATH_STATE.get().is_some() {
-        panic!("hotpath::init() must be called only once");
+        panic!("hotpath::init() can be called only once");
     }
 
     let percentiles = percentiles.to_vec();
@@ -210,7 +210,6 @@ pub fn init(caller_name: String, percentiles: &[u8]) -> HotPath {
                     state_guard.stats = Some(local_stats);
                 }
 
-                // Signal completion
                 let _ = completion_tx.send(());
             })
             .expect("Failed to spawn hotpath-worker thread");
@@ -245,9 +244,7 @@ pub fn send_measurement(name: &'static str, duration: Duration) {
 #[macro_export]
 macro_rules! measure_block {
     ($label:expr, $expr:expr) => {{
-        // Enforce the label is a &'static str at compile-time
         let __label_static: &'static str = $label;
-
         let __t0 = ::std::time::Instant::now();
         let __hotpath_out = $expr;
         $crate::send_measurement(__label_static, __t0.elapsed());

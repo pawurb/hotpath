@@ -1,9 +1,10 @@
-# hotpath - find and profile Rust bottlenecks
+# hotpath - find and profile bottlenecks in Rust
 [![Latest Version](https://img.shields.io/crates/v/hotpath.svg)](https://crates.io/crates/hotpath) [![GH Actions](https://github.com/pawurb/hotpath/actions/workflows/ci.yml/badge.svg)](https://github.com/pawurb/hotpath/actions)
 
 ![Report](hotpath-report2.png)
 
-A lightweight Rust performance profiling library with background processing and statistic aggregations. Instrument any function or code block to quickly find bottlenecks and profile calls with minimal overhead. See each label's share of total runtime to easily focus optimizations.
+
+A lightweight Rust performance profiling library with background processing and statistical aggregation. Instrument functions/code blocks to quickly find bottlenecks and profile with minimal overhead. See each calls's share of total runtime to easily focus optimizations.
 
 ## Features
 

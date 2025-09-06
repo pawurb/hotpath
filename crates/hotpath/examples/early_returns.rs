@@ -9,7 +9,7 @@ fn early_return() {
         return;
     }
 
-    std::thread::sleep(Duration::from_millis(10));
+    unreachable!();
 }
 
 fn may_fail(flag: bool) -> Result<(), &'static str> {
@@ -20,8 +20,7 @@ fn may_fail(flag: bool) -> Result<(), &'static str> {
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
 fn propagates_error() -> Result<(), &'static str> {
     may_fail(true)?;
-    std::thread::sleep(Duration::from_millis(10));
-    Ok(())
+    unreachable!();
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
