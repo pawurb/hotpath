@@ -3,15 +3,14 @@
 
 ![Report](hotpath-report2.png)
 
-
-A lightweight Rust performance profiling library with background processing and statistical aggregation. Instrument functions/code blocks to quickly find bottlenecks and profile with minimal overhead. See each calls's share of total runtime to easily focus optimizations.
+A lightweight, easy-to-configure Rust profiler that shows exactly where your code spends time. Instrument any function or code block to quickly spot bottlenecks, and focus your optimizations where they matter most.
 
 ## Features
 
-- **Opt-in / zero cost when disabled** (gate with a feature flag)
-- **Low-overhead profiling** for functions and code blocks
-- **Stats per label:** min, max, avg, total, calls, % of total and configurable percentiles
-- Works for both **sync** and **async** code
+- **Zero-cost when disabled** — fully gated by a feature flag.
+- **Low-overhead** profiling for both sync and async code.
+- **Detailed stats**: min, max, avg, total time, call count, % of total runtime, and configurable percentiles (p95, p99, etc.).
+- **Background processing** for minimal profiling impact.
 
 ## Quick Start
 
