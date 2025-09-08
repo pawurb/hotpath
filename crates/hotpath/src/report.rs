@@ -1,12 +1,12 @@
 use colored::*;
-use prettytable::{Attr, Cell, Row, Table, color};
+use prettytable::{color, Attr, Cell, Row, Table};
 use std::collections::HashMap;
 use std::time::Duration;
 
 use super::FunctionStats;
 
 pub fn display_performance_summary(
-    stats: &HashMap<String, FunctionStats>,
+    stats: &HashMap<&'static str, FunctionStats>,
     total_elapsed: Duration,
     caller_name: &str,
     percentiles: &[u8],

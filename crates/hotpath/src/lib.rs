@@ -92,7 +92,7 @@ struct HotPathState {
     sender: Option<Sender<Measurement>>,
     shutdown_tx: Option<Sender<()>>,
     completion_rx: Option<Receiver<()>>,
-    stats: Option<HashMap<String, FunctionStats>>, // Will be populated by worker at shutdown
+    stats: Option<HashMap<&'static str, FunctionStats>>,// Will be populated by worker at shutdown
     start_time: Instant,
     caller_name: String,
     percentiles: Vec<u8>,
@@ -148,11 +148,11 @@ impl Drop for HotPath {
     }
 }
 
-fn process_measurement(stats: &mut HashMap<String, FunctionStats>, m: Measurement) {
+fn process_measurement(stats: &mut HashMap<&'static str, FunctionStats>, m: Measurement) {
     if let Some(s) = stats.get_mut(m.function_name) {
         s.update(m.duration);
     } else {
-        stats.insert(m.function_name.to_string(), FunctionStats::new(m.duration));
+        stats.insert(m.function_name, FunctionStats::new(m.duration));
     }
 }
 
@@ -183,7 +183,7 @@ pub fn init(caller_name: String, percentiles: &[u8]) -> HotPath {
         thread::Builder::new()
             .name("hotpath-worker".into())
             .spawn(move || {
-                let mut local_stats = HashMap::<String, FunctionStats>::new();
+                let mut local_stats = HashMap::<&'static str, FunctionStats>::new();
 
                 loop {
                     select! {
