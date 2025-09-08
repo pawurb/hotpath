@@ -113,3 +113,12 @@ async fn main() {
 ```
 
 For multiple measurements of the same function or code block, percentiles help identify performance distribution patterns.
+
+## Benchmarking
+
+Measure overhead of profiling 1 million empty method calls with [hyperfine](https://github.com/sharkdp/hyperfine):
+
+```
+cargo build --example benchmark --features hotpath --release
+hyperfine --warmup 3 './target/release/examples/benchmark'
+```

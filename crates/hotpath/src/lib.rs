@@ -9,19 +9,15 @@ use std::time::{Duration, Instant};
 
 mod report;
 
-#[derive(Debug, Clone)]
-pub struct Measurement {
-    pub function_name: &'static str,
-    pub duration: Duration,
-}
+pub type Measurement = (u64, &'static str);
 
 #[derive(Debug)]
 pub struct FunctionStats {
-    pub min_duration: Duration,
-    pub max_duration: Duration,
-    pub total_duration: Duration,
+    pub min_duration_ns: u64,
+    pub max_duration_ns: u64,
+    pub total_duration_ns: u64,
     pub count: u64,
-    hist: Histogram<u64>, // store durations in nanoseconds
+    hist: Histogram<u64>,
 }
 
 impl FunctionStats {
@@ -29,41 +25,39 @@ impl FunctionStats {
     const HIGH_NS: u64 = 10_000_000_000; // 10s
     const SIGFIGS: u8 = 3;
 
-    pub fn new(first: Duration) -> Self {
+    pub fn new(first_ns: u64) -> Self {
         let hist = Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
             .expect("hdrhistogram init");
         let mut s = Self {
-            min_duration: first,
-            max_duration: first,
-            total_duration: first,
+            min_duration_ns: first_ns,
+            max_duration_ns: first_ns,
+            total_duration_ns: first_ns,
             count: 1,
             hist,
         };
-        s.record(first);
+        s.record(first_ns);
         s
     }
 
     #[inline]
-    fn record(&mut self, d: Duration) {
-        let ns = d.as_nanos();
-        let clamped = ns.min(Self::HIGH_NS as u128).max(Self::LOW_NS as u128) as u64;
+    fn record(&mut self, ns: u64) {
+        let clamped = ns.clamp(Self::LOW_NS, Self::HIGH_NS);
         self.hist.record(clamped).unwrap();
     }
 
-    pub fn update(&mut self, duration: Duration) {
-        self.min_duration = self.min_duration.min(duration);
-        self.max_duration = self.max_duration.max(duration);
-        self.total_duration += duration;
+    pub fn update(&mut self, duration_ns: u64) {
+        self.min_duration_ns = self.min_duration_ns.min(duration_ns);
+        self.max_duration_ns = self.max_duration_ns.max(duration_ns);
+        self.total_duration_ns += duration_ns;
         self.count += 1;
-        self.record(duration);
+        self.record(duration_ns);
     }
 
-    pub fn avg_duration(&self) -> Duration {
+    pub fn avg_duration_ns(&self) -> u64 {
         if self.count == 0 {
-            Duration::ZERO
+            0
         } else {
-            let avg = self.total_duration.as_nanos() / self.count as u128;
-            Duration::from_nanos(avg as u64)
+            self.total_duration_ns / self.count
         }
     }
 
@@ -163,10 +157,11 @@ impl Drop for HotPath {
 }
 
 fn process_measurement(stats: &mut HashMap<&'static str, FunctionStats>, m: Measurement) {
-    if let Some(s) = stats.get_mut(m.function_name) {
-        s.update(m.duration);
+    let duration_ns = m.0;
+    if let Some(s) = stats.get_mut(m.1) {
+        s.update(duration_ns);
     } else {
-        stats.insert(m.function_name, FunctionStats::new(m.duration));
+        stats.insert(m.1, FunctionStats::new(duration_ns));
     }
 }
 
@@ -248,10 +243,7 @@ pub fn send_measurement(name: &'static str, duration: Duration) {
         return;
     };
 
-    let measurement = Measurement {
-        function_name: name,
-        duration,
-    };
+    let measurement = (duration.as_nanos() as u64, name);
     let _ = sender.try_send(measurement);
 }
 

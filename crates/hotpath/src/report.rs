@@ -51,12 +51,12 @@ pub fn display_performance_summary(
     let mut sorted_stats: Vec<_> = stats.iter().collect();
     sorted_stats.sort_by(|(_, a), (_, b)| {
         let a_percentage = if total_elapsed.as_nanos() > 0 {
-            (a.total_duration.as_nanos() as f64 / total_elapsed.as_nanos() as f64) * 100.0
+            (a.total_duration_ns as f64 / total_elapsed.as_nanos() as f64) * 100.0
         } else {
             0.0
         };
         let b_percentage = if total_elapsed.as_nanos() > 0 {
-            (b.total_duration.as_nanos() as f64 / total_elapsed.as_nanos() as f64) * 100.0
+            (b.total_duration_ns as f64 / total_elapsed.as_nanos() as f64) * 100.0
         } else {
             0.0
         };
@@ -67,7 +67,7 @@ pub fn display_performance_summary(
 
     for (function_name, stats) in sorted_stats {
         let percentage = if total_elapsed.as_nanos() > 0 {
-            (stats.total_duration.as_nanos() as f64 / total_elapsed.as_nanos() as f64) * 100.0
+            (stats.total_duration_ns as f64 / total_elapsed.as_nanos() as f64) * 100.0
         } else {
             0.0
         };
@@ -82,9 +82,18 @@ pub fn display_performance_summary(
         let mut row_cells = vec![
             Cell::new(&short_name),
             Cell::new(&stats.count.to_string()),
-            Cell::new(&format!("{:.2?}", stats.min_duration)),
-            Cell::new(&format!("{:.2?}", stats.max_duration)),
-            Cell::new(&format!("{:.2?}", stats.avg_duration())),
+            Cell::new(&format!(
+                "{:.2?}",
+                Duration::from_nanos(stats.min_duration_ns)
+            )),
+            Cell::new(&format!(
+                "{:.2?}",
+                Duration::from_nanos(stats.max_duration_ns)
+            )),
+            Cell::new(&format!(
+                "{:.2?}",
+                Duration::from_nanos(stats.avg_duration_ns())
+            )),
         ];
 
         // Add percentile values based on selected percentiles
@@ -93,7 +102,10 @@ pub fn display_performance_summary(
             row_cells.push(Cell::new(&format!("{:.2?}", value)));
         }
 
-        row_cells.push(Cell::new(&format!("{:.2?}", stats.total_duration)));
+        row_cells.push(Cell::new(&format!(
+            "{:.2?}",
+            Duration::from_nanos(stats.total_duration_ns)
+        )));
         row_cells.push(Cell::new(&format!("{percentage:.2}%")).with_style(Attr::Bold));
 
         table.add_row(Row::new(row_cells));
