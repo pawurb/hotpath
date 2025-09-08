@@ -1,5 +1,5 @@
 use colored::*;
-use prettytable::{color, Attr, Cell, Row, Table};
+use prettytable::{Attr, Cell, Row, Table, color};
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -88,14 +88,9 @@ pub fn display_performance_summary(
         ];
 
         // Add percentile values based on selected percentiles
-        if !percentiles.is_empty() {
-            let mut sorted_measurements = stats.measurements.clone();
-            sorted_measurements.sort();
-
-            for &p in percentiles {
-                let value = stats.percentile(p as f64, &sorted_measurements);
-                row_cells.push(Cell::new(&format!("{:.2?}", value)));
-            }
+        for &p in percentiles {
+            let value = stats.percentile(p as f64);
+            row_cells.push(Cell::new(&format!("{:.2?}", value)));
         }
 
         row_cells.push(Cell::new(&format!("{:.2?}", stats.total_duration)));

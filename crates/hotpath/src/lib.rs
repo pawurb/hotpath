@@ -1,6 +1,7 @@
 pub use hotpath_macros::{main, measure};
 
 use crossbeam_channel::{Receiver, Sender, bounded, select};
+use hdrhistogram::Histogram;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock, RwLock};
 use std::thread;
@@ -14,24 +15,39 @@ pub struct Measurement {
     pub duration: Duration,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FunctionStats {
     pub min_duration: Duration,
     pub max_duration: Duration,
     pub total_duration: Duration,
     pub count: u64,
-    pub measurements: Vec<Duration>,
+    hist: Histogram<u64>, // store durations in nanoseconds
 }
 
 impl FunctionStats {
-    pub fn new(duration: Duration) -> Self {
-        Self {
-            min_duration: duration,
-            max_duration: duration,
-            total_duration: duration,
+    const LOW_NS: u64 = 1;
+    const HIGH_NS: u64 = 10_000_000_000; // 10s
+    const SIGFIGS: u8 = 3;
+
+    pub fn new(first: Duration) -> Self {
+        let hist = Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
+            .expect("hdrhistogram init");
+        let mut s = Self {
+            min_duration: first,
+            max_duration: first,
+            total_duration: first,
             count: 1,
-            measurements: vec![duration],
-        }
+            hist,
+        };
+        s.record(first);
+        s
+    }
+
+    #[inline]
+    fn record(&mut self, d: Duration) {
+        let ns = d.as_nanos();
+        let clamped = ns.min(Self::HIGH_NS as u128).max(Self::LOW_NS as u128) as u64;
+        self.hist.record(clamped).unwrap();
     }
 
     pub fn update(&mut self, duration: Duration) {
@@ -39,29 +55,27 @@ impl FunctionStats {
         self.max_duration = self.max_duration.max(duration);
         self.total_duration += duration;
         self.count += 1;
-        self.measurements.push(duration);
+        self.record(duration);
     }
 
     pub fn avg_duration(&self) -> Duration {
-        if self.count > 0 {
-            let total_nanos = self.total_duration.as_nanos();
-            let avg_nanos = total_nanos / self.count as u128;
-            Duration::from_nanos(avg_nanos as u64)
-        } else {
+        if self.count == 0 {
             Duration::ZERO
+        } else {
+            let avg = self.total_duration.as_nanos() / self.count as u128;
+            Duration::from_nanos(avg as u64)
         }
     }
 
-    pub fn percentile(&self, percentile: f64, sorted_measurements: &[Duration]) -> Duration {
-        if sorted_measurements.is_empty() {
+    /// Percentile in [1.0, 99.0], e.g. 95.0 or 99.0
+    #[inline]
+    pub fn percentile(&self, p: f64) -> Duration {
+        if self.count == 0 {
             return Duration::ZERO;
         }
-
-        let pct = percentile.clamp(1.0, 99.0);
-
-        let index = ((pct / 100.0) * (sorted_measurements.len() as f64 - 1.0)).floor() as usize;
-
-        sorted_measurements[index]
+        let p = p.clamp(1.0, 99.0);
+        let v = self.hist.value_at_percentile(p);
+        Duration::from_nanos(v)
     }
 }
 
@@ -92,7 +106,7 @@ struct HotPathState {
     sender: Option<Sender<Measurement>>,
     shutdown_tx: Option<Sender<()>>,
     completion_rx: Option<Receiver<()>>,
-    stats: Option<HashMap<&'static str, FunctionStats>>,// Will be populated by worker at shutdown
+    stats: Option<HashMap<&'static str, FunctionStats>>, // Will be populated by worker at shutdown
     start_time: Instant,
     caller_name: String,
     percentiles: Vec<u8>,
