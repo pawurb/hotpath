@@ -10,9 +10,14 @@ categories = ["development-tools"]
 
 [features]
 default = []
-hotpath = []
+hotpath = ["hotpath-macros/hotpath"]
+hotpath-alloc-bytes-total = []
+hotpath-alloc-bytes-max = []
+hotpath-alloc-count-total = []
+hotpath-alloc-count-max = []
 
 [dependencies]
+cfg-if = "1.0.3"
 colored = { version = "3.0.0" }
 crossbeam-channel = "0.5"
 hdrhistogram = { version = "7.5", default-features = false }
