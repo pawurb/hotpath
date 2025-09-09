@@ -13,8 +13,6 @@ pub type Measurement = (u64, &'static str);
 
 #[derive(Debug)]
 pub struct FunctionStats {
-    pub min_duration_ns: u64,
-    pub max_duration_ns: u64,
     pub total_duration_ns: u64,
     pub count: u64,
     hist: Histogram<u64>,
@@ -29,8 +27,6 @@ impl FunctionStats {
         let hist = Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
             .expect("hdrhistogram init");
         let mut s = Self {
-            min_duration_ns: first_ns,
-            max_duration_ns: first_ns,
             total_duration_ns: first_ns,
             count: 1,
             hist,
@@ -46,8 +42,6 @@ impl FunctionStats {
     }
 
     pub fn update(&mut self, duration_ns: u64) {
-        self.min_duration_ns = self.min_duration_ns.min(duration_ns);
-        self.max_duration_ns = self.max_duration_ns.max(duration_ns);
         self.total_duration_ns += duration_ns;
         self.count += 1;
         self.record(duration_ns);
@@ -67,7 +61,7 @@ impl FunctionStats {
         if self.count == 0 {
             return Duration::ZERO;
         }
-        let p = p.clamp(1.0, 99.0);
+        let p = p.clamp(0.0, 100.0);
         let v = self.hist.value_at_percentile(p);
         Duration::from_nanos(v)
     }

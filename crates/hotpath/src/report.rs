@@ -15,13 +15,7 @@ pub fn display_performance_summary(
 
     let mut table = Table::new();
     // Build header row dynamically based on selected percentiles
-    let mut header_cells = vec![
-        Cell::new("Function"),
-        Cell::new("Calls"),
-        Cell::new("Min"),
-        Cell::new("Max"),
-        Cell::new("Avg"),
-    ];
+    let mut header_cells = vec![Cell::new("Function"), Cell::new("Calls"), Cell::new("Avg")];
 
     // Add percentile columns
     for &p in percentiles {
@@ -82,14 +76,6 @@ pub fn display_performance_summary(
         let mut row_cells = vec![
             Cell::new(&short_name),
             Cell::new(&stats.count.to_string()),
-            Cell::new(&format!(
-                "{:.2?}",
-                Duration::from_nanos(stats.min_duration_ns)
-            )),
-            Cell::new(&format!(
-                "{:.2?}",
-                Duration::from_nanos(stats.max_duration_ns)
-            )),
             Cell::new(&format!(
                 "{:.2?}",
                 Duration::from_nanos(stats.avg_duration_ns())

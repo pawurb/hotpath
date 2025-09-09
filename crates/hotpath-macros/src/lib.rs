@@ -48,12 +48,12 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         panic!("Invalid percentile value: {}", lit_int.token())
                     });
 
-                    // Validate percentile values at compile time (1-99)
-                    if (1..=99).contains(&value) {
+                    // Validate percentile values at compile time (0-100)
+                    if (0..=100).contains(&value) {
                         parsed_percentiles.push(value);
                     } else {
                         panic!(
-                            "Invalid percentile: {}. Percentiles must be between 1 and 99.",
+                            "Invalid percentile: {}. Percentiles must be between 0 and 100.",
                             value
                         )
                     }

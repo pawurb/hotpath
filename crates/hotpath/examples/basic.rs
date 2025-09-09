@@ -11,7 +11,7 @@ async fn async_function(sleep: u64) {
 }
 
 #[tokio::main]
-#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [99]))]
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [0,99,100]))]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..100 {
         sync_function(i);

@@ -112,7 +112,7 @@ async fn main() {
 }
 ```
 
-For multiple measurements of the same function or code block, percentiles help identify performance distribution patterns.
+For multiple measurements of the same function or code block, percentiles help identify performance distribution patterns. You can use percentile 0 to display min value and 100 to display max.
 
 ## Benchmarking
 
