@@ -251,3 +251,17 @@ macro_rules! measure_block {
         __hotpath_out
     }};
 }
+
+#[macro_export]
+macro_rules! measure_block_cfg {
+    ($label:expr, $expr:expr) => {{
+        let __hotpath_out = $expr;
+        #[cfg(feature = "hotpath")]
+        {
+            let __label_static: &'static str = $label;
+            let __t0 = ::std::time::Instant::now();
+            $crate::send_measurement(__label_static, __t0.elapsed());
+        }
+        __hotpath_out
+    }};
+}
