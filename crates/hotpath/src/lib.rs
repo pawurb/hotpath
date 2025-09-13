@@ -317,6 +317,9 @@ pub(crate) trait Tableable<'a> {
     }
     fn percentiles(&self) -> Vec<u8>;
     fn rows(&self) -> Vec<Vec<String>>;
+    fn has_unsupported_async(&self) -> bool {
+        false // Default implementation for time-based measurements
+    }
     fn new(
         stats: &'a HashMap<&'static str, FunctionStats>,
         total_elapsed: Duration,
@@ -355,4 +358,17 @@ pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &st
 
     println!("{}", tableable.description(caller_name));
     table.printstd();
+
+    if tableable.has_unsupported_async() {
+        println!();
+        println!(
+            "* {} for async methods is currently only available for tokio {} runtime.",
+            "alloc profiling".yellow().bold(),
+            "current_thread".green().bold()
+        );
+        println!(
+            "  Please use {} to enable it.",
+            "#[tokio::main(flavor = \"current_thread\")]".cyan().bold()
+        );
+    }
 }

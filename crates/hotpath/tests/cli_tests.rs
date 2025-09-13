@@ -13,15 +13,14 @@ pub mod tests {
         ];
 
         for feature in features {
+            let features_arg = if feature.is_empty() {
+                "hotpath".to_string()
+            } else {
+                format!("hotpath,{}", feature)
+            };
+
             let output = Command::new("cargo")
-                .args([
-                    "run",
-                    "--example",
-                    "basic",
-                    "--features",
-                    "hotpath",
-                    feature,
-                ])
+                .args(["run", "--example", "basic", "--features", &features_arg])
                 .output()
                 .expect("Failed to execute command");
 
@@ -59,14 +58,19 @@ pub mod tests {
             "hotpath-alloc-count-max",
         ];
         for feature in features {
+            let features_arg = if feature == "hotpath" {
+                "hotpath".to_string()
+            } else {
+                format!("hotpath,{}", feature)
+            };
+
             let output = Command::new("cargo")
                 .args([
                     "run",
                     "--example",
                     "early_returns",
                     "--features",
-                    "hotpath",
-                    feature,
+                    &features_arg,
                 ])
                 .output()
                 .expect("Failed to execute command");
@@ -89,6 +93,30 @@ pub mod tests {
                     "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_unsupported_async_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "--example",
+                "unsupported_async",
+                "--features",
+                "hotpath,hotpath-alloc-bytes-max",
+            ])
+            .output()
+            .expect("Failed to execute command");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        let expected = ["N/A*"];
+
+        for expected in expected {
+            assert!(
+                stdout.contains(expected),
+                "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
+            );
         }
     }
 }

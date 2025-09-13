@@ -55,6 +55,10 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
         self.percentiles.clone()
     }
 
+    fn has_unsupported_async(&self) -> bool {
+        self.stats.values().any(|s| s.has_unsupported_async)
+    }
+
     fn rows(&self) -> Vec<Vec<String>> {
         let mut sorted_stats: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
 
@@ -97,19 +101,32 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
                     function_name.to_string()
                 };
 
-                let mut row = vec![
-                    short_name,
-                    stats.count.to_string(),
-                    format_bytes(stats.avg_bytes()),
-                ];
+                let mut row = if stats.has_unsupported_async {
+                    vec![short_name, stats.count.to_string(), "N/A*".to_string()]
+                } else {
+                    vec![
+                        short_name,
+                        stats.count.to_string(),
+                        format_bytes(stats.avg_bytes()),
+                    ]
+                };
 
                 for &p in &self.percentiles {
-                    let bytes_total = stats.bytes_total_percentile(p as f64);
-                    row.push(format_bytes(bytes_total));
+                    if stats.has_unsupported_async {
+                        row.push("N/A*".to_string());
+                    } else {
+                        let bytes_total = stats.bytes_total_percentile(p as f64);
+                        row.push(format_bytes(bytes_total));
+                    }
                 }
 
-                row.push(format_bytes(stats.total_bytes()));
-                row.push(format!("{:.2}%", percentage));
+                if stats.has_unsupported_async {
+                    row.push("N/A*".to_string());
+                    row.push("N/A*".to_string());
+                } else {
+                    row.push(format_bytes(stats.total_bytes()));
+                    row.push(format!("{:.2}%", percentage));
+                }
 
                 row
             })

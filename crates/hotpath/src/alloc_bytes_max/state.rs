@@ -13,6 +13,7 @@ pub struct FunctionStats {
     pub count: u64,
     bytes_max_hist: Option<Histogram<u64>>,
     pub has_data: bool,
+    pub has_unsupported_async: bool,
 }
 
 impl FunctionStats {
@@ -29,6 +30,7 @@ impl FunctionStats {
             count: 1,
             bytes_max_hist: Some(bytes_max_hist),
             has_data: true,
+            has_unsupported_async: alloc_info.unsupported_async,
         };
         s.record_alloc(alloc_info);
         s
@@ -48,6 +50,7 @@ impl FunctionStats {
 
     pub fn update_alloc(&mut self, alloc_info: &AllocationInfo) {
         self.count += 1;
+        self.has_unsupported_async |= alloc_info.unsupported_async;
         self.record_alloc(alloc_info);
     }
 

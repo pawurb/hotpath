@@ -7,11 +7,14 @@ pub const MAX_DEPTH: usize = 64;
 pub struct AllocationInfo {
     /// The total amount of bytes allocated during a [measure()] call.
     pub bytes_total: u64,
+
+    pub unsupported_async: bool,
 }
 
 impl std::ops::AddAssign for AllocationInfo {
     fn add_assign(&mut self, other: Self) {
         self.bytes_total += other.bytes_total;
+        self.unsupported_async |= other.unsupported_async;
     }
 }
 

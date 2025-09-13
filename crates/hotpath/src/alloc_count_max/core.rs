@@ -9,12 +9,15 @@ pub struct AllocationInfo {
     pub count_current: i64,
     /// The max number of allocations held during a point in time during a [measure()] call.
     pub count_max: u64,
+
+    pub unsupported_async: bool,
 }
 
 impl std::ops::AddAssign for AllocationInfo {
     fn add_assign(&mut self, other: Self) {
         self.count_current += other.count_current;
         self.count_max = self.count_max.max(other.count_max);
+        self.unsupported_async |= other.unsupported_async;
     }
 }
 

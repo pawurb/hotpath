@@ -9,12 +9,15 @@ pub struct AllocationInfo {
     pub bytes_current: i64,
     /// The max amount of bytes allocated at one time during a [measure()] call.
     pub bytes_max: u64,
+
+    pub unsupported_async: bool,
 }
 
 impl std::ops::AddAssign for AllocationInfo {
     fn add_assign(&mut self, other: Self) {
         self.bytes_current += other.bytes_current;
         self.bytes_max = self.bytes_max.max(other.bytes_max);
+        self.unsupported_async |= other.unsupported_async;
     }
 }
 
