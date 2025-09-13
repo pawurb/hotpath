@@ -116,11 +116,18 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #vis #sig {
                     async {
-                        #[cfg(all(not(feature = "hotpath-alloc-bytes-total"), not(feature = "hotpath-alloc-bytes-max"), not(feature = "hotpath-alloc-count-total"), not(feature = "hotpath-alloc-count-max")))]
-                        let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
-
-                        #[cfg(any(feature = "hotpath-alloc-bytes-total", feature = "hotpath-alloc-bytes-max", feature = "hotpath-alloc-count-total", feature = "hotpath-alloc-count-max"))]
-                        let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                        cfg_if::cfg_if! {
+                            if #[cfg(any(
+                                feature = "hotpath-alloc-bytes-total",
+                                feature = "hotpath-alloc-bytes-max",
+                                feature = "hotpath-alloc-count-total",
+                                feature = "hotpath-alloc-count-max"
+                            ))] {
+                                let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                            } else {
+                                let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                            }
+                        }
 
                         #block
                     }.await
@@ -129,11 +136,18 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! {
                 #vis #sig {
-                    #[cfg(all(not(feature = "hotpath-alloc-bytes-total"), not(feature = "hotpath-alloc-bytes-max"), not(feature = "hotpath-alloc-count-total"), not(feature = "hotpath-alloc-count-max")))]
-                    let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
-
-                    #[cfg(any(feature = "hotpath-alloc-bytes-total", feature = "hotpath-alloc-bytes-max", feature = "hotpath-alloc-count-total", feature = "hotpath-alloc-count-max"))]
-                    let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                    cfg_if::cfg_if! {
+                        if #[cfg(any(
+                            feature = "hotpath-alloc-bytes-total",
+                            feature = "hotpath-alloc-bytes-max",
+                            feature = "hotpath-alloc-count-total",
+                            feature = "hotpath-alloc-count-max"
+                        ))] {
+                            let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                        } else {
+                            let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                        }
+                    }
 
                     #block
                 }
