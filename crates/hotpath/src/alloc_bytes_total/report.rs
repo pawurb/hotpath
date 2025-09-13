@@ -34,23 +34,6 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
         )
     }
 
-    fn headers(&self) -> Vec<String> {
-        let mut headers = vec![
-            "Function".to_string(),
-            "Calls".to_string(),
-            "Avg".to_string(),
-        ];
-
-        for &p in &self.percentiles {
-            headers.push(format!("P{}", p));
-        }
-
-        headers.push("Total".to_string());
-        headers.push("% Total".to_string());
-
-        headers
-    }
-
     fn percentiles(&self) -> Vec<u8> {
         self.percentiles.clone()
     }
