@@ -3,14 +3,15 @@
 
 ![Report](hotpath-report2.png)
 
-A lightweight, easy-to-configure Rust profiler that shows exactly where your code spends time. Instrument any function or code block to quickly spot bottlenecks, and focus your optimizations where they matter most.
+A lightweight, easy-to-configure Rust profiler that shows exactly where your code spends time and allocates memory. Instrument any function or code block to quickly spot bottlenecks, and focus your optimizations where they matter most.
 
 ## Features
 
 - **Zero-cost when disabled** — fully gated by a feature flag.
 - **Low-overhead** profiling for both sync and async code.
-- **Detailed stats**: min, max, avg, total time, call count, % of total runtime, and configurable percentiles (p95, p99, etc.).
+- **Detailed stats**: avg, total time, call count, % of total runtime, and configurable percentiles (p95, p99, etc.).
 - **Background processing** for minimal profiling impact.
+- **Memory allocation tracking** — track bytes allocated or allocation counts per function.
 
 ## Quick Start
 
@@ -21,8 +22,14 @@ Add to your `Cargo.toml`:
 hotpath = { version = "0.2", optional = true }
 
 [features]
-hotpath = ["dep:hotpath"]
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
+hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
+hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
+hotpath-alloc-count-total= ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-count-max= ["hotpath/hotpath-alloc-count-max"]
 ```
+
+This config ensures that the lib has **zero** overhead unless explicitly enabled via a `hotpath` feature.
 
 ## Usage
 
@@ -41,7 +48,7 @@ async fn async_function(sleep: u64) {
 
 // When using with tokio, place the #[tokio::main] first
 #[tokio::main]
-// You can configure any percentile between 1 and 99
+// You can configure any percentile between 0 and 100
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [99]))]
 async fn main() {
     for i in 0..100 {
@@ -65,6 +72,7 @@ cargo run --features=hotpath
 ```
 
 Output:
+
 ```
 [hotpath] Performance Summary from basic::main (Total time: 126.86ms):
 +-----------------------+-------+----------+---------+---------+---------+----------+---------+
@@ -78,10 +86,62 @@ Output:
 +-----------------------+-------+----------+---------+---------+---------+----------+---------+
 ```
 
+## Allocation Tracking
+
+In addition to time-based profiling, `hotpath` can track memory allocations. This feature uses a custom global allocator from [allocation-counter crate](https://github.com/fornwall/allocation-counter) to intercept all memory allocations and provides detailed statistics about memory usage per function.
+
+Available alloc profiling modes:
+
+- `hotpath-alloc-bytes-total` - Tracks total bytes allocated during each function call
+- `hotpath-alloc-bytes-max` - Tracks peak memory usage during each function call
+- `hotpath-alloc-count-total` - Tracks total number of allocations per function call
+- `hotpath-alloc-count-max` - Tracks peak number of live allocations per function call
+
+Run your program with `--features='hotpath,hotpath-alloc-bytes-max'` to print a similar report:
+
+![Alloc report](alloc-report.png)
+
+### Profiling memory allocations for async functions
+
+To profile `async` functions you have to use a similar config:
+
+```rust
+#[cfg(any(
+    feature = "hotpath-alloc-bytes-total",
+    feature = "hotpath-alloc-bytes-max",
+    feature = "hotpath-alloc-count-total",
+    feature = "hotpath-alloc-count-max",
+))]
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
+    _ = inner_main().await;
+}
+
+#[cfg(not(any(
+    feature = "hotpath-alloc-bytes-total",
+    feature = "hotpath-alloc-bytes-max",
+    feature = "hotpath-alloc-count-total",
+    feature = "hotpath-alloc-count-max",
+)))]
+#[tokio::main]
+async fn main() {
+    _ = inner_main().await;
+}
+
+#[cfg_attr(feature = "hotpath", hotpath::main)]
+async fn inner_main() {
+    // ...
+}
+```
+
+It ensures that tokio runs in a `current_thread` runtime mode if any of the allocation profiling flags is enabled.
+
+**Why this limitation exists**: The allocation tracking uses thread-local storage to track memory usage. In multi-threaded runtimes, async tasks can migrate between threads, making it impossible to accurately attribute allocations to specific function calls.
+
 ## How It Works
 
 1. `#[cfg_attr(feature = "hotpath", hotpath::main)]` - Macro that initializes the background measurement processing
-2. `#[cfg_attr(feature = "hotpath", hotpath::measure)]` - Macro that wraps functions with timing code
+2. `#[cfg_attr(feature = "hotpath", hotpath::measure)]` - Macro that wraps functions with profiling code
 3. **Background thread** - Measurements are sent to a dedicated worker thread via bounded channel
 4. **Statistics aggregation** - Worker thread maintains running statistics for each function/code block
 5. **Automatic reporting** - Performance summary displayed when the program exits

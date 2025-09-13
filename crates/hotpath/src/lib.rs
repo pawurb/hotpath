@@ -1,3 +1,4 @@
+pub use cfg_if;
 pub use hotpath_macros::{main, measure};
 
 cfg_if::cfg_if! {
@@ -74,7 +75,7 @@ use std::time::Instant;
 #[macro_export]
 macro_rules! measure_block {
     ($label:expr, $expr:expr) => {{
-        cfg_if::cfg_if! {
+        $crate::cfg_if::cfg_if! {
             if #[cfg(any(
                 feature = "hotpath-alloc-bytes-total",
                 feature = "hotpath-alloc-bytes-max",
