@@ -57,7 +57,6 @@ async fn main() {
         async_function(i * 2).await;
 
         // Measure code blocks with static labels
-        #[cfg(feature = "hotpath")]
         hotpath::measure_block!("custom_block", {
             std::thread::sleep(Duration::from_nanos(i * 3))
         });
@@ -162,7 +161,9 @@ An opt-in attribute macro that instruments functions to send timing measurements
 
 `hotpath::measure_block!(label, expr)`
 
-Macro that measures the execution time of a code block with a static string label.
+Macro that measures the execution time of a code block with a static string label. 
+
+Only measures when the `hotpath` feature is enabled on the consumer crate, otherwise the code block runs normally.
 
 ### Percentiles Support
 
