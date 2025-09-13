@@ -123,7 +123,18 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
                                 feature = "hotpath-alloc-count-total",
                                 feature = "hotpath-alloc-count-max"
                             ))] {
-                                let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                                use tokio::runtime::{Handle, RuntimeFlavor};
+                                let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
+
+                                let _guard = match runtime_flavor {
+                                    Some(RuntimeFlavor::CurrentThread) => {
+                                        hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name)))
+                                    }
+                                    _ => {
+                                        hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name)))
+                                    }
+                                };
+
                             } else {
                                 let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
                             }

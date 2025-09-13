@@ -18,3 +18,19 @@ pub fn format_bytes(bytes: u64) -> String {
         format!("{:.1} {}", size, UNITS[unit_idx])
     }
 }
+
+pub struct NoopAsyncAllocGuard {
+    name: &'static str,
+}
+
+impl NoopAsyncAllocGuard {
+    #[inline]
+    pub fn new(name: &'static str) -> Self {
+        Self { name }
+    }
+}
+
+impl Drop for NoopAsyncAllocGuard {
+    #[inline]
+    fn drop(&mut self) {}
+}

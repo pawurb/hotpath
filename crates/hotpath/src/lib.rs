@@ -12,6 +12,12 @@ cfg_if::cfg_if! {
         // Shared global allocator
         #[global_allocator]
         static GLOBAL: alloc::allocator::CountingAllocator = alloc::allocator::CountingAllocator {};
+        pub use alloc::shared::NoopAsyncAllocGuard;
+
+        pub enum AllocGuardType {
+            AllocGuard(AllocGuard),
+            NoopAsyncAllocGuard(NoopAsyncAllocGuard),
+        }
     } else {
         // Time-based profiling (when no allocation features are enabled)
         pub mod time;

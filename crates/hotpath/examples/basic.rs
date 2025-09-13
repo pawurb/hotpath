@@ -20,7 +20,7 @@ async fn async_function(sleep: u64) {
     tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [0,99,100]))]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..100 {
