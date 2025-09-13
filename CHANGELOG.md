@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - Use p0 p100 instead of min max
 - Noop measure blocks
 - Make noop block the default
+- Implement memory allocations tracking
 
 ### 🐛 Bug Fixes
 
@@ -17,6 +18,11 @@ All notable changes to this project will be documented in this file.
 ### ⚡ Performance
 
 - Reduce Measurement size and add basic benchmark
+
+### ⚙️ Miscellaneous Tasks
+
+- Configure changelog
+- Release 0.2.4
 
 ## [0.2.3] - 2025-09-08
 
