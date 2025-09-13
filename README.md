@@ -1,7 +1,7 @@
 # hotpath - find and profile bottlenecks in Rust
 [![Latest Version](https://img.shields.io/crates/v/hotpath.svg)](https://crates.io/crates/hotpath) [![GH Actions](https://github.com/pawurb/hotpath/actions/workflows/ci.yml/badge.svg)](https://github.com/pawurb/hotpath/actions)
 
-![Report](hotpath-report2.png)
+[![Profiling report for mevlog-rs](hotpath-report3.png)](https://github.com/pawurb/mevlog-rs)
 
 A lightweight, easy-to-configure Rust profiler that shows exactly where your code spends time and allocates memory. Instrument any function or code block to quickly spot bottlenecks, and focus your optimizations where they matter most.
 
@@ -9,9 +9,9 @@ A lightweight, easy-to-configure Rust profiler that shows exactly where your cod
 
 - **Zero-cost when disabled** — fully gated by a feature flag.
 - **Low-overhead** profiling for both sync and async code.
+- **Memory allocation tracking** — track bytes allocated or allocation counts per function.
 - **Detailed stats**: avg, total time, call count, % of total runtime, and configurable percentiles (p95, p99, etc.).
 - **Background processing** for minimal profiling impact.
-- **Memory allocation tracking** — track bytes allocated or allocation counts per function.
 
 ## Quick Start
 
@@ -97,13 +97,17 @@ Available alloc profiling modes:
 - `hotpath-alloc-count-total` - Tracks total number of allocations per function call
 - `hotpath-alloc-count-max` - Tracks peak number of live allocations per function call
 
-Run your program with `--features='hotpath,hotpath-alloc-bytes-max'` to print a similar report:
+Run your program with a selected flag to print a similar report:
+
+```
+cargo run --features='hotpath,hotpath-alloc-bytes-max'
+```
 
 ![Alloc report](alloc-report.png)
 
 ### Profiling memory allocations for async functions
 
-To profile `async` functions you have to use a similar config:
+To profile memory usage of `async` functions you have to use a similar config:
 
 ```rust
 #[cfg(any(
