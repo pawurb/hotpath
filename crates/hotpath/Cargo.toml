@@ -15,10 +15,10 @@ hotpath = []
 [dependencies]
 colored = { version = "3.0.0" }
 crossbeam-channel = "0.5"
-hdrhistogram = "7.5"
+hdrhistogram = { version = "7.5", default-features = false }
 # hotpath-macros = { version = "0.2.3" }
 hotpath-macros = { path = "../hotpath-macros" }
-prettytable-rs = { version = "0.10.0" }
+prettytable-rs = { version = "0.10.0", default-features = false }
 
 [dev-dependencies]
 tokio = { version = "1.47.1", features = ["full"] }
