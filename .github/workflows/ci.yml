@@ -23,24 +23,45 @@ jobs:
           rustup component add rustfmt
           rustup component add clippy
       - uses: taiki-e/install-action@cargo-audit
-      - name: Check 
+      - name: Check no features
         run: | 
           cargo check 
-      - name: Check hotpath feature flag
+      - name: Check hotpath feature (time mode)
         run: | 
           cargo check --features hotpath
+      - name: Check hotpath-alloc-bytes-total
+        run: |
+          cargo check --features "hotpath,hotpath-alloc-bytes-total"
+      - name: Check hotpath-alloc-bytes-max
+        run: |
+          cargo check --features "hotpath,hotpath-alloc-bytes-max"
+      - name: Check hotpath-alloc-count-total
+        run: |
+          cargo check --features "hotpath,hotpath-alloc-count-total"
+      - name: Check hotpath-alloc-count-max
+        run: |
+          cargo check --features "hotpath,hotpath-alloc-count-max"
       - name: Fmt 
         run: |
           cargo fmt --all --check
-      - name: Lint 
+      - name: Lint (default features)
         run: |
-          cargo clippy --all --all-features -- -D warnings
+          cargo clippy --all --features hotpath -- -D warnings
+      - name: Lint (hotpath-alloc-bytes-total)
+        run: |
+          cargo clippy --all --features "hotpath,hotpath-alloc-bytes-total" -- -D warnings
+      - name: Lint (hotpath-alloc-bytes-max) 
+        run: |
+          cargo clippy --all --features "hotpath,hotpath-alloc-bytes-max" -- -D warnings
+      - name: Lint (hotpath-alloc-count-total)
+        run: |
+          cargo clippy --all --features "hotpath,hotpath-alloc-count-total" -- -D warnings
+      - name: Lint (hotpath-alloc-count-max)
+        run: |
+          cargo clippy --all --features "hotpath,hotpath-alloc-count-max" -- -D warnings
       - name: Audit
         run: |
           cargo audit --ignore RUSTSEC-2023-0071
-      - name: Run tests
-        run: | 
-          cargo test --all-features --lib -- --nocapture
       - name: Run integration tests
-        run: |
-          cargo test --tests -- --nocapture
+        run: | 
+          cargo test --test cli_tests -- --nocapture

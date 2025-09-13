@@ -76,7 +76,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
         static __hotpath_main_guard: () = ();
 
         #vis #sig {
-            #[cfg(feature = "hotpath")]
             let _hotpath = {
                 fn __caller_fn() {}
                 let caller_name = std::any::type_name_of_val(&__caller_fn);
@@ -95,6 +94,13 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+#[cfg(not(feature = "hotpath"))]
+#[proc_macro_attribute]
+pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[cfg(feature = "hotpath")]
 #[proc_macro_attribute]
 pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
@@ -110,7 +116,30 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #vis #sig {
                     async {
-                        let _guard = hotpath::MeasureGuard::new(concat!(module_path!(), "::", #name));
+                        ::hotpath::cfg_if::cfg_if! {
+                            if #[cfg(any(
+                                feature = "hotpath-alloc-bytes-total",
+                                feature = "hotpath-alloc-bytes-max",
+                                feature = "hotpath-alloc-count-total",
+                                feature = "hotpath-alloc-count-max"
+                            ))] {
+                                use tokio::runtime::{Handle, RuntimeFlavor};
+                                let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
+
+                                let _guard = match runtime_flavor {
+                                    Some(RuntimeFlavor::CurrentThread) => {
+                                        hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name)))
+                                    }
+                                    _ => {
+                                        hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name)))
+                                    }
+                                };
+
+                            } else {
+                                let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                            }
+                        }
+
                         #block
                     }.await
                 }
@@ -118,7 +147,19 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! {
                 #vis #sig {
-                    let _guard = hotpath::MeasureGuard::new(concat!(module_path!(), "::", #name));
+                    ::hotpath::cfg_if::cfg_if! {
+                        if #[cfg(any(
+                            feature = "hotpath-alloc-bytes-total",
+                            feature = "hotpath-alloc-bytes-max",
+                            feature = "hotpath-alloc-count-total",
+                            feature = "hotpath-alloc-count-max"
+                        ))] {
+                            let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                        } else {
+                            let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                        }
+                    }
+
                     #block
                 }
             }

@@ -1,163 +1,134 @@
+pub use cfg_if;
 pub use hotpath_macros::{main, measure};
 
-use crossbeam_channel::{Receiver, Sender, bounded, select};
-use hdrhistogram::Histogram;
+cfg_if::cfg_if! {
+    if #[cfg(any(
+        feature = "hotpath-alloc-bytes-total",
+        feature = "hotpath-alloc-bytes-max",
+        feature = "hotpath-alloc-count-total",
+        feature = "hotpath-alloc-count-max"
+    ))] {
+        pub mod alloc;
+
+        // Shared global allocator
+        #[global_allocator]
+        static GLOBAL: alloc::allocator::CountingAllocator = alloc::allocator::CountingAllocator {};
+        pub use alloc::shared::NoopAsyncAllocGuard;
+
+        pub enum AllocGuardType {
+            AllocGuard(AllocGuard),
+            NoopAsyncAllocGuard(NoopAsyncAllocGuard),
+        }
+    } else {
+        // Time-based profiling (when no allocation features are enabled)
+        pub mod time;
+        pub use time::guard::TimeGuard;
+        pub use time::state::send_duration_measurement;
+        use crate::time::{
+            report::StatsTable,
+            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+        };
+    }
+}
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "hotpath-alloc-bytes-max")] {
+        pub mod alloc_bytes_max;
+        pub use alloc_bytes_max::{core::AllocationInfo, guard::AllocGuard};
+        use crate::alloc_bytes_max::{
+            report::StatsTable,
+            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+        };
+    } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
+        pub mod alloc_bytes_total;
+        pub use alloc_bytes_total::{core::AllocationInfo, guard::AllocGuard};
+        use crate::alloc_bytes_total::{
+            report::StatsTable,
+            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+        };
+    } else if #[cfg(feature = "hotpath-alloc-count-max")] {
+        pub mod alloc_count_max;
+        pub use alloc_count_max::{core::AllocationInfo, guard::AllocGuard};
+        use crate::alloc_count_max::{
+            report::StatsTable,
+            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+        };
+    } else if #[cfg(feature = "hotpath-alloc-count-total")] {
+        pub mod alloc_count_total;
+        pub use alloc_count_total::{core::AllocationInfo, guard::AllocGuard};
+        use crate::alloc_count_total::{
+            report::StatsTable,
+            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+        };
+    }
+}
+
+use std::time::Duration;
+
+use colored::*;
+use crossbeam_channel::{bounded, select};
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock, RwLock};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-mod report;
-
-pub type Measurement = (u64, &'static str);
-
-#[derive(Debug)]
-pub struct FunctionStats {
-    pub total_duration_ns: u64,
-    pub count: u64,
-    hist: Histogram<u64>,
-}
-
-impl FunctionStats {
-    const LOW_NS: u64 = 1;
-    const HIGH_NS: u64 = 10_000_000_000; // 10s
-    const SIGFIGS: u8 = 3;
-
-    pub fn new(first_ns: u64) -> Self {
-        let hist = Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
-            .expect("hdrhistogram init");
-        let mut s = Self {
-            total_duration_ns: first_ns,
-            count: 1,
-            hist,
-        };
-        s.record(first_ns);
-        s
-    }
-
-    #[inline]
-    fn record(&mut self, ns: u64) {
-        let clamped = ns.clamp(Self::LOW_NS, Self::HIGH_NS);
-        self.hist.record(clamped).unwrap();
-    }
-
-    pub fn update(&mut self, duration_ns: u64) {
-        self.total_duration_ns += duration_ns;
-        self.count += 1;
-        self.record(duration_ns);
-    }
-
-    pub fn avg_duration_ns(&self) -> u64 {
-        if self.count == 0 {
-            0
-        } else {
-            self.total_duration_ns / self.count
-        }
-    }
-
-    /// Percentile in [1.0, 99.0], e.g. 95.0 or 99.0
-    #[inline]
-    pub fn percentile(&self, p: f64) -> Duration {
-        if self.count == 0 {
-            return Duration::ZERO;
-        }
-        let p = p.clamp(0.0, 100.0);
-        let v = self.hist.value_at_percentile(p);
-        Duration::from_nanos(v)
-    }
-}
-
-pub struct MeasureGuard {
-    name: &'static str,
-    start: Instant,
-}
-
-impl MeasureGuard {
-    #[inline]
-    pub fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            start: Instant::now(),
-        }
-    }
-}
-
-impl Drop for MeasureGuard {
-    #[inline]
-    fn drop(&mut self) {
-        let dur = self.start.elapsed();
-        crate::send_measurement(self.name, dur);
-    }
-}
-
-struct HotPathState {
-    sender: Option<Sender<Measurement>>,
-    shutdown_tx: Option<Sender<()>>,
-    completion_rx: Option<Receiver<()>>,
-    stats: Option<HashMap<&'static str, FunctionStats>>, // Will be populated by worker at shutdown
-    start_time: Instant,
-    caller_name: String,
-    percentiles: Vec<u8>,
-}
-
-static HOTPATH_STATE: OnceLock<Arc<RwLock<HotPathState>>> = OnceLock::new();
-
-pub struct HotPath {
-    state: Arc<RwLock<HotPathState>>,
-}
-
-impl Drop for HotPath {
-    fn drop(&mut self) {
-        let state = Arc::clone(&self.state);
-
-        // Signal shutdown and wait for processing thread to complete
-        let (shutdown_tx, completion_rx, end_time) = {
-            let Ok(mut state_guard) = state.write() else {
-                return;
-            };
-
-            state_guard.sender = None;
-            let end_time = Instant::now();
-
-            let shutdown_tx = state_guard.shutdown_tx.take();
-            let completion_rx = state_guard.completion_rx.take();
-            (shutdown_tx, completion_rx, end_time)
-        };
-
-        if let Some(tx) = shutdown_tx {
-            let _ = tx.send(());
-        }
-
-        if let Some(rx) = completion_rx {
-            let _ = rx.recv();
-        }
-
-        if let Ok(state_guard) = state.read()
-            && let Some(ref stats) = state_guard.stats
-        {
-            let total_elapsed = end_time.duration_since(state_guard.start_time);
-            if stats.is_empty() {
-                report::display_no_measurements_message(total_elapsed, &state_guard.caller_name);
+#[cfg(feature = "hotpath")]
+#[macro_export]
+macro_rules! measure_block {
+    ($label:expr, $expr:expr) => {{
+        $crate::cfg_if::cfg_if! {
+            if #[cfg(any(
+                feature = "hotpath-alloc-bytes-total",
+                feature = "hotpath-alloc-bytes-max",
+                feature = "hotpath-alloc-count-total",
+                feature = "hotpath-alloc-count-max"
+            ))] {
+                let _guard = hotpath::AllocGuard::new($label);
             } else {
-                report::display_performance_summary(
-                    stats,
-                    total_elapsed,
-                    &state_guard.caller_name,
-                    &state_guard.percentiles,
-                );
+                let _guard = hotpath::TimeGuard::new($label);
             }
         }
-    }
+
+        $expr
+    }};
 }
 
-fn process_measurement(stats: &mut HashMap<&'static str, FunctionStats>, m: Measurement) {
-    let duration_ns = m.0;
-    if let Some(s) = stats.get_mut(m.1) {
-        s.update(duration_ns);
-    } else {
-        stats.insert(m.1, FunctionStats::new(duration_ns));
-    }
+#[cfg(not(feature = "hotpath"))]
+#[macro_export]
+macro_rules! measure_block {
+    ($label:expr, $expr:expr) => {{ $expr }};
 }
+
+use std::sync::Arc;
+use std::sync::OnceLock;
+use std::sync::RwLock;
+
+// Compile-time check: ensure only one allocation feature is enabled at a time
+#[cfg(all(
+    feature = "hotpath-alloc-bytes-total",
+    any(
+        feature = "hotpath-alloc-bytes-max",
+        feature = "hotpath-alloc-count-total",
+        feature = "hotpath-alloc-count-max"
+    )
+))]
+compile_error!("Only one allocation feature can be enabled at a time");
+
+#[cfg(all(
+    feature = "hotpath-alloc-bytes-max",
+    any(
+        feature = "hotpath-alloc-count-total",
+        feature = "hotpath-alloc-count-max"
+    )
+))]
+compile_error!("Only one allocation feature can be enabled at a time");
+
+#[cfg(all(
+    feature = "hotpath-alloc-count-total",
+    feature = "hotpath-alloc-count-max"
+))]
+compile_error!("Only one allocation feature can be enabled at a time");
+
+static HOTPATH_STATE: OnceLock<Arc<RwLock<HotPathState>>> = OnceLock::new();
 
 pub fn init(caller_name: String, percentiles: &[u8]) -> HotPath {
     if HOTPATH_STATE.get().is_some() {
@@ -225,32 +196,180 @@ pub fn init(caller_name: String, percentiles: &[u8]) -> HotPath {
     }
 }
 
-pub fn send_measurement(name: &'static str, duration: Duration) {
-    let Some(state) = HOTPATH_STATE.get() else {
-        panic!("hotpath::init() must be called when --features hotpath is enabled");
-    };
-
-    let Ok(state_guard) = state.read() else {
-        return;
-    };
-    let Some(sender) = state_guard.sender.as_ref() else {
-        return;
-    };
-
-    let measurement = (duration.as_nanos() as u64, name);
-    let _ = sender.try_send(measurement);
+pub struct HotPath {
+    state: Arc<RwLock<HotPathState>>,
 }
 
-#[macro_export]
-macro_rules! measure_block {
-    ($label:expr, $expr:expr) => {{
-        #[cfg(feature = "hotpath")]
-        let __label_static: &'static str = $label;
-        #[cfg(feature = "hotpath")]
-        let __t0 = ::std::time::Instant::now();
-        let __hotpath_out = $expr;
-        #[cfg(feature = "hotpath")]
-        $crate::send_measurement(__label_static, __t0.elapsed());
-        __hotpath_out
-    }};
+impl Drop for HotPath {
+    fn drop(&mut self) {
+        let state = Arc::clone(&self.state);
+
+        // Signal shutdown and wait for processing thread to complete
+        let (shutdown_tx, completion_rx, _end_time) = {
+            let Ok(mut state_guard) = state.write() else {
+                return;
+            };
+
+            state_guard.sender = None;
+            let end_time = Instant::now();
+
+            let shutdown_tx = state_guard.shutdown_tx.take();
+            let completion_rx = state_guard.completion_rx.take();
+            (shutdown_tx, completion_rx, end_time)
+        };
+
+        if let Some(tx) = shutdown_tx {
+            let _ = tx.send(());
+        }
+
+        if let Some(rx) = completion_rx {
+            let _ = rx.recv();
+        }
+
+        if let Ok(state_guard) = state.read()
+            && let Some(ref stats) = state_guard.stats
+        {
+            let total_elapsed = _end_time.duration_since(state_guard.start_time);
+            if stats.is_empty() {
+                display_no_measurements_message(total_elapsed, &state_guard.caller_name);
+            } else {
+                display_performance_summary(
+                    stats,
+                    total_elapsed,
+                    &state_guard.caller_name,
+                    &state_guard.percentiles,
+                );
+            }
+        }
+    }
+}
+
+pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
+    let title = format!(
+        "\n{} No measurements recorded from {} (Total time: {:.2?})",
+        "[hotpath]".blue().bold(),
+        caller_name.yellow().bold(),
+        total_elapsed
+    );
+    println!("{title}");
+    println!();
+    println!(
+        "To start measuring performance, add the {} macro to your functions:",
+        "#[hotpath::measure]".cyan().bold()
+    );
+    println!();
+    println!(
+        "  {}",
+        "#[cfg_attr(feature = \"hotpath\", hotpath::measure)]".cyan()
+    );
+    println!("  {}", "fn your_function() {".dimmed());
+    println!("  {}", "    // your code here".dimmed());
+    println!("  {}", "}".dimmed());
+    println!();
+    println!(
+        "Or use {} to measure code blocks:",
+        "hotpath::measure_block!".cyan().bold()
+    );
+    println!();
+    println!("  {}", "#[cfg(feature = \"hotpath\")]".cyan());
+    println!("  {}", "hotpath::measure_block!(\"label\", {".cyan());
+    println!("  {}", "    // your code here".dimmed());
+    println!("  {}", "});".cyan());
+    println!();
+}
+
+pub fn display_performance_summary(
+    stats: &HashMap<&'static str, FunctionStats>,
+    total_elapsed: Duration,
+    caller_name: &str,
+    percentiles: &[u8],
+) {
+    let has_data = stats.values().any(|s| s.has_data);
+
+    if has_data {
+        display_table(
+            StatsTable::new(stats, total_elapsed, percentiles.to_vec()),
+            caller_name,
+        );
+    } else {
+        println!("\nNo measurement data available.");
+    }
+}
+
+use prettytable::{Attr, Cell, Row, Table, color};
+
+pub(crate) trait Tableable<'a> {
+    fn description(&self, caller_name: &str) -> String;
+    fn headers(&self) -> Vec<String> {
+        let mut headers = vec![
+            "Function".to_string(),
+            "Calls".to_string(),
+            "Avg".to_string(),
+        ];
+
+        for &p in &self.percentiles() {
+            headers.push(format!("P{}", p));
+        }
+
+        headers.push("Total".to_string());
+        headers.push("% Total".to_string());
+
+        headers
+    }
+    fn percentiles(&self) -> Vec<u8>;
+    fn rows(&self) -> Vec<Vec<String>>;
+    fn has_unsupported_async(&self) -> bool {
+        false // Default implementation for time-based measurements
+    }
+    fn new(
+        stats: &'a HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        percentiles: Vec<u8>,
+    ) -> Self;
+}
+
+pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &str) {
+    let use_colors = std::env::var("NO_COLOR").is_err();
+
+    let mut table = Table::new();
+
+    let header_cells: Vec<Cell> = tableable
+        .headers()
+        .into_iter()
+        .map(|header| {
+            if use_colors {
+                Cell::new(&header)
+                    .with_style(Attr::Bold)
+                    .with_style(Attr::ForegroundColor(color::CYAN))
+            } else {
+                Cell::new(&header).with_style(Attr::Bold)
+            }
+        })
+        .collect();
+
+    table.add_row(Row::new(header_cells));
+
+    for row_data in tableable.rows() {
+        let row_cells: Vec<Cell> = row_data
+            .into_iter()
+            .map(|cell_data| Cell::new(&cell_data))
+            .collect();
+        table.add_row(Row::new(row_cells));
+    }
+
+    println!("{}", tableable.description(caller_name));
+    table.printstd();
+
+    if tableable.has_unsupported_async() {
+        println!();
+        println!(
+            "* {} for async methods is currently only available for tokio {} runtime.",
+            "alloc profiling".yellow().bold(),
+            "current_thread".green().bold()
+        );
+        println!(
+            "  Please use {} to enable it.",
+            "#[tokio::main(flavor = \"current_thread\")]".cyan().bold()
+        );
+    }
 }
