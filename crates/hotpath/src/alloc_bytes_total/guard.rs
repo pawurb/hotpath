@@ -29,8 +29,7 @@ impl Drop for AllocGuard {
             let depth = s.depth as usize;
             let popped = s.elements[depth];
             s.depth -= 1;
-            let parent = s.depth as usize;
-            s.elements[parent] += popped;
+            // Don't bubble allocations to parent - each function reports only its direct allocations
             popped
         });
 

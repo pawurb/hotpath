@@ -36,6 +36,9 @@ pub fn track_alloc(size: usize) {
     ALLOCATIONS.with(|stack| {
         let mut stack = stack.borrow_mut();
         let depth = stack.depth as usize;
-        stack.elements[depth].bytes_total += size as u64;
+        // Only track if we're within a measured function (depth > 0) and within bounds
+        if depth > 0 && depth < MAX_DEPTH {
+            stack.elements[depth].bytes_total += size as u64;
+        }
     });
 }
