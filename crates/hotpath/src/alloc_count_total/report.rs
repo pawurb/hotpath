@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use super::state::FunctionStats;
-use crate::Tableable;
+use crate::output::Tableable;
 
 pub struct StatsTable<'a> {
     stats: &'a HashMap<&'static str, FunctionStats>,

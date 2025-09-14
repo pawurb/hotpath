@@ -1,6 +1,24 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{Expr, ExprArray, ExprAssign, ExprPath, ItemFn, Lit, parse_macro_input};
+use syn::parse::Parser;
+use syn::{ItemFn, LitInt, LitStr, parse_macro_input};
+
+#[derive(Clone, Copy)]
+enum Format {
+    Table,
+    Json,
+    JsonPretty,
+}
+
+impl Format {
+    fn to_tokens(self) -> proc_macro2::TokenStream {
+        match self {
+            Format::Table => quote!(hotpath::Format::Table),
+            Format::Json => quote!(hotpath::Format::Json),
+            Format::JsonPretty => quote!(hotpath::Format::JsonPretty),
+        }
+    }
+}
 
 #[proc_macro_attribute]
 pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -9,68 +27,64 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let sig = &input.sig;
     let block = &input.block;
 
-    let percentiles = if attr.is_empty() {
-        vec![95]
-    } else {
-        let attr_expr = parse_macro_input!(attr as Expr);
-        match attr_expr {
-            Expr::Assign(ExprAssign { left, right, .. }) => {
-                if let Expr::Path(ExprPath { path, .. }) = left.as_ref() {
-                    if path.is_ident("percentiles") {
-                        if let Expr::Array(ExprArray { elems, .. }) = right.as_ref() {
-                            parse_percentiles_array(elems)
-                        } else {
-                            panic!(
-                                "Expected percentiles to be an array, e.g., percentiles = [50, 95, 99]"
-                            )
-                        }
-                    } else {
-                        panic!("Unknown parameter. Use: percentiles = [50, 95, 99]")
-                    }
-                } else {
-                    panic!("Expected named parameter. Use: percentiles = [50, 95, 99]")
-                }
-            }
-            _ => panic!(
-                "Expected percentiles parameter with named syntax, e.g., percentiles = [50, 95, 99]"
-            ),
-        }
-    };
+    // Defaults
+    let mut percentiles: Vec<u8> = vec![95];
+    let mut format = Format::Table;
 
-    fn parse_percentiles_array(
-        elems: &syn::punctuated::Punctuated<Expr, syn::Token![,]>,
-    ) -> Vec<u8> {
-        let mut parsed_percentiles = Vec::new();
-        for elem in elems {
-            if let Expr::Lit(lit_expr) = elem {
-                if let Lit::Int(lit_int) = &lit_expr.lit {
-                    let value: u8 = lit_int.base10_parse().unwrap_or_else(|_| {
-                        panic!("Invalid percentile value: {}", lit_int.token())
-                    });
-
-                    // Validate percentile values at compile time (0-100)
-                    if (0..=100).contains(&value) {
-                        parsed_percentiles.push(value);
-                    } else {
-                        panic!(
-                            "Invalid percentile: {}. Percentiles must be between 0 and 100.",
-                            value
-                        )
+    // Parse named args like: percentiles=[..], format=".."
+    if !attr.is_empty() {
+        let parser = syn::meta::parser(|meta| {
+            if meta.path.is_ident("percentiles") {
+                meta.input.parse::<syn::Token![=]>()?;
+                let content;
+                syn::bracketed!(content in meta.input);
+                let mut vals = Vec::new();
+                while !content.is_empty() {
+                    let li: LitInt = content.parse()?;
+                    let v: u8 = li.base10_parse()?;
+                    if !(0..=100).contains(&v) {
+                        return Err(
+                            meta.error(format!("Invalid percentile {} (must be 0..=100)", v))
+                        );
                     }
-                } else {
-                    panic!("Percentile values must be integer literals")
+                    vals.push(v);
+                    if !content.is_empty() {
+                        content.parse::<syn::Token![,]>()?;
+                    }
                 }
-            } else {
-                panic!("Percentile values must be integer literals")
+                if vals.is_empty() {
+                    return Err(meta.error("At least one percentile must be specified"));
+                }
+                percentiles = vals;
+                return Ok(());
             }
+
+            if meta.path.is_ident("format") {
+                meta.input.parse::<syn::Token![=]>()?;
+                let lit: LitStr = meta.input.parse()?;
+                format =
+                    match lit.value().as_str() {
+                        "table" => Format::Table,
+                        "json" => Format::Json,
+                        "json-pretty" => Format::JsonPretty,
+                        other => return Err(meta.error(format!(
+                            "Unknown format {:?}. Expected one of: \"table\", \"json\", \"json-pretty\"",
+                            other
+                        ))),
+                    };
+                return Ok(());
+            }
+
+            Err(meta.error("Unknown parameter. Supported: percentiles=[..], format=\"..\""))
+        });
+
+        if let Err(e) = parser.parse2(proc_macro2::TokenStream::from(attr)) {
+            return e.to_compile_error().into();
         }
-        if parsed_percentiles.is_empty() {
-            panic!("At least one percentile must be specified")
-        }
-        parsed_percentiles
     }
 
     let percentiles_array = quote! { &[#(#percentiles),*] };
+    let format_token = format.to_tokens();
 
     let output = quote! {
         static __hotpath_main_guard: () = ();
@@ -78,13 +92,11 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
         #vis #sig {
             let _hotpath = {
                 fn __caller_fn() {}
-                let caller_name = std::any::type_name_of_val(&__caller_fn);
-                let caller_name = caller_name
+                let caller_name = std::any::type_name_of_val(&__caller_fn)
                     .strip_suffix("::__caller_fn")
-                    .unwrap_or(caller_name)
-                    .replace("::{{closure}}", "")
-                    .to_string();
-                hotpath::init(caller_name, #percentiles_array)
+                    .unwrap_or(std::any::type_name_of_val(&__caller_fn))
+                    .replace("::{{closure}}", "");
+                hotpath::init(caller_name.to_string(), #percentiles_array, #format_token)
             };
 
             #block

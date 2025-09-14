@@ -75,6 +75,7 @@ pub struct HotPathState {
     pub start_time: Instant,
     pub caller_name: String,
     pub percentiles: Vec<u8>,
+    pub format: crate::Format,
 }
 
 pub(crate) fn process_measurement(

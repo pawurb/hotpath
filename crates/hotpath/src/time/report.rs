@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use super::state::FunctionStats;
-use crate::Tableable;
+use crate::output::Tableable;
 use colored::*;
 
 pub struct StatsTable<'a> {

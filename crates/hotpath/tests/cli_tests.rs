@@ -33,7 +33,7 @@ pub mod tests {
                 "custom_block",
                 "basic::sync_function",
                 "basic::async_function",
-                "P99",
+                "P95",
                 "Total",
                 "% Total",
             ];
@@ -118,5 +118,92 @@ pub mod tests {
                 "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
             );
         }
+    }
+
+    #[test]
+    fn test_main_empty_params() {
+        let output = Command::new("cargo")
+            .args(["run", "--example", "main_empty", "--features", "hotpath"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("main_empty::example_function"));
+        assert!(stdout.contains("P95"));
+        assert!(stdout.contains("Function"));
+    }
+
+    #[test]
+    fn test_main_percentiles_param() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "--example",
+                "main_percentiles",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("main_percentiles::example_function"));
+        assert!(stdout.contains("P50"));
+        assert!(stdout.contains("P90"));
+        assert!(stdout.contains("P99"));
+        assert!(stdout.contains("Function"));
+    }
+
+    #[test]
+    fn test_main_format_param() {
+        let output = Command::new("cargo")
+            .args(["run", "--example", "main_format", "--features", "hotpath"])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("main_format::example_function"));
+        assert!(stdout.contains("\"hotpath_profiling_mode\""));
+        assert!(stdout.contains("\"calls\""));
+    }
+
+    #[test]
+    fn test_main_percentiles_format_params() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "--example",
+                "main_percentiles_format",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("main_percentiles_format::example_function"));
+        assert!(stdout.contains("\"hotpath_profiling_mode\""));
+        assert!(stdout.contains("\"p75\""));
+        assert!(stdout.contains("\"p95\"")); // Custom percentile in JSON
     }
 }

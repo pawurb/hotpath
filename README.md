@@ -178,6 +178,53 @@ async fn main() {
 
 For multiple measurements of the same function or code block, percentiles help identify performance distribution patterns. You can use percentile 0 to display min value and 100 to display max.
 
+### Output Formats
+
+By default, `hotpath` displays results in a human-readable table format. You can also output results in JSON format for programmatic processing:
+
+```rust
+#[tokio::main]
+#[cfg_attr(feature = "hotpath", hotpath::main(format = "json-pretty"))]
+async fn main() {
+    // Your code here
+}
+```
+
+Supported format options:
+- `"table"` (default) - Human-readable table format
+- `"json"` - Compact, oneline JSON format
+- `"json-pretty"` - Pretty-printed JSON format
+
+Example JSON output:
+
+```json
+{
+  "hotpath_profiling_mode": "timing",
+  "output": {
+    "basic::async_function": {
+      "calls": "100",
+      "avg": "1.16ms",
+      "p95": "1.26ms",
+      "total": "116.41ms",
+      "percent_total": "96.18%"
+    },
+    "basic::sync_function": {
+      "calls": "100",
+      "avg": "23.10µs",
+      "p95": "37.89µs",
+      "total": "2.31ms",
+      "percent_total": "1.87%"
+    }
+  }
+}
+```
+
+You can combine both percentiles and format parameters:
+
+```rust
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
+```
+
 ## Benchmarking
 
 Measure overhead of profiling 1 million empty method calls with [hyperfine](https://github.com/sharkdp/hyperfine):
