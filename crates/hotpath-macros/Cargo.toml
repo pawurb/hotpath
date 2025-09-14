@@ -20,4 +20,4 @@ cfg-if = "1.0.3"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
-tokio = { version = "1.47.1", default-features = false }
+tokio = { version = "1.47", default-features = false }
