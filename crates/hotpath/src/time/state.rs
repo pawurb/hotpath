@@ -70,8 +70,7 @@ impl FunctionStats {
 pub struct HotPathState {
     pub sender: Option<Sender<Measurement>>,
     pub shutdown_tx: Option<Sender<()>>,
-    pub completion_rx: Option<Receiver<()>>,
-    pub stats: Option<HashMap<&'static str, FunctionStats>>,
+    pub completion_rx: Option<Receiver<HashMap<&'static str, FunctionStats>>>,
     pub start_time: Instant,
     pub caller_name: String,
     pub percentiles: Vec<u8>,

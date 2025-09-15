@@ -1,9 +1,9 @@
 use crate::{FunctionStats, StatsTable};
 use colored::*;
-use prettytable::{Attr, Cell, Row, Table, color};
+use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
-    Serialize,
     ser::{SerializeMap, Serializer},
+    Serialize,
 };
 use std::collections::HashMap;
 use std::time::Duration;

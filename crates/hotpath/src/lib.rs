@@ -103,7 +103,9 @@ macro_rules! measure_block {
 #[cfg(not(feature = "hotpath"))]
 #[macro_export]
 macro_rules! measure_block {
-    ($label:expr, $expr:expr) => {{ $expr }};
+    ($label:expr, $expr:expr) => {{
+        $expr
+    }};
 }
 
 use std::sync::Arc;
@@ -148,21 +150,19 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
     let state = HOTPATH_STATE.get_or_init(|| {
         let (tx, rx) = bounded::<Measurement>(10000);
         let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
-        let (completion_tx, completion_rx) = bounded::<()>(1);
+        let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
         let start_time = Instant::now();
 
         let state_arc = Arc::new(RwLock::new(HotPathState {
             sender: Some(tx),
             shutdown_tx: Some(shutdown_tx),
             completion_rx: Some(completion_rx),
-            stats: None, // Will be populated by worker at shutdown
             start_time,
             caller_name,
             percentiles,
             format,
         }));
 
-        let state_clone = Arc::clone(&state_arc);
         thread::Builder::new()
             .name("hotpath-worker".into())
             .spawn(move || {
@@ -188,12 +188,8 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
                     }
                 }
 
-                // Copy stats back to shared state before signaling completion
-                if let Ok(mut state_guard) = state_clone.write() {
-                    state_guard.stats = Some(local_stats);
-                }
-
-                let _ = completion_tx.send(());
+                // Send stats via completion channel
+                let _ = completion_tx.send(local_stats);
             })
             .expect("Failed to spawn hotpath-worker thread");
 
@@ -232,23 +228,21 @@ impl Drop for HotPath {
         }
 
         if let Some(rx) = completion_rx {
-            let _ = rx.recv();
-        }
-
-        if let Ok(state_guard) = state.read()
-            && let Some(ref stats) = state_guard.stats
-        {
-            let total_elapsed = _end_time.duration_since(state_guard.start_time);
-            if stats.is_empty() {
-                display_no_measurements_message(total_elapsed, &state_guard.caller_name);
-            } else {
-                display_performance_summary(
-                    stats,
-                    total_elapsed,
-                    &state_guard.caller_name,
-                    &state_guard.percentiles,
-                    state_guard.format,
-                );
+            if let Ok(stats) = rx.recv() {
+                if let Ok(state_guard) = state.read() {
+                    let total_elapsed = _end_time.duration_since(state_guard.start_time);
+                    if stats.is_empty() {
+                        display_no_measurements_message(total_elapsed, &state_guard.caller_name);
+                    } else {
+                        display_performance_summary(
+                            &stats,
+                            total_elapsed,
+                            &state_guard.caller_name,
+                            &state_guard.percentiles,
+                            state_guard.format,
+                        );
+                    }
+                }
             }
         }
     }

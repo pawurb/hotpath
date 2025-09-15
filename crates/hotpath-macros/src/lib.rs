@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
-use syn::{ItemFn, LitInt, LitStr, parse_macro_input};
+use syn::{parse_macro_input, ItemFn, LitInt, LitStr};
 
 #[derive(Clone, Copy)]
 enum Format {

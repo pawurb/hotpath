@@ -38,13 +38,13 @@ impl FunctionStats {
 
     #[inline]
     fn record_alloc(&mut self, alloc_info: &AllocationInfo) {
-        if let Some(ref mut bytes_max_hist) = self.bytes_max_hist
-            && alloc_info.bytes_max > 0
-        {
-            let clamped_max = alloc_info
-                .bytes_max
-                .clamp(Self::LOW_BYTES, Self::HIGH_BYTES);
-            bytes_max_hist.record(clamped_max).unwrap();
+        if let Some(ref mut bytes_max_hist) = self.bytes_max_hist {
+            if alloc_info.bytes_max > 0 {
+                let clamped_max = alloc_info
+                    .bytes_max
+                    .clamp(Self::LOW_BYTES, Self::HIGH_BYTES);
+                bytes_max_hist.record(clamped_max).unwrap();
+            }
         }
     }
 
@@ -86,8 +86,7 @@ impl FunctionStats {
 pub struct HotPathState {
     pub sender: Option<Sender<Measurement>>,
     pub shutdown_tx: Option<Sender<()>>,
-    pub completion_rx: Option<Receiver<()>>,
-    pub stats: Option<HashMap<&'static str, FunctionStats>>,
+    pub completion_rx: Option<Receiver<HashMap<&'static str, FunctionStats>>>,
     pub start_time: Instant,
     pub caller_name: String,
     pub percentiles: Vec<u8>,

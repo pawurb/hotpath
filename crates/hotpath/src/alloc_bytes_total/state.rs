@@ -38,13 +38,13 @@ impl FunctionStats {
 
     #[inline]
     fn record_alloc(&mut self, alloc_info: &AllocationInfo) {
-        if let Some(ref mut bytes_total_hist) = self.bytes_total_hist
-            && alloc_info.bytes_total > 0
-        {
-            let clamped_total = alloc_info
-                .bytes_total
-                .clamp(Self::LOW_BYTES, Self::HIGH_BYTES);
-            bytes_total_hist.record(clamped_total).unwrap();
+        if let Some(ref mut bytes_total_hist) = self.bytes_total_hist {
+            if alloc_info.bytes_total > 0 {
+                let clamped_total = alloc_info
+                    .bytes_total
+                    .clamp(Self::LOW_BYTES, Self::HIGH_BYTES);
+                bytes_total_hist.record(clamped_total).unwrap();
+            }
         }
     }
 
@@ -89,8 +89,7 @@ impl FunctionStats {
 pub struct HotPathState {
     pub sender: Option<Sender<Measurement>>,
     pub shutdown_tx: Option<Sender<()>>,
-    pub completion_rx: Option<Receiver<()>>,
-    pub stats: Option<HashMap<&'static str, FunctionStats>>,
+    pub completion_rx: Option<Receiver<HashMap<&'static str, FunctionStats>>>,
     pub start_time: Instant,
     pub caller_name: String,
     pub percentiles: Vec<u8>,
