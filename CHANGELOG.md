@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.5] - 2025-09-15
+
+### 🚀 Features
+
+- Add json output
+
+### 🐛 Bug Fixes
+
+- Relax dependencies versions
+- Use edition 2021
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.2.5
+
 ## [0.2.4] - 2025-09-13
 
 ### 🚀 Features
