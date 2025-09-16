@@ -128,7 +128,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #vis #sig {
                     async {
-                        ::hotpath::cfg_if::cfg_if! {
+                        cfg_if::cfg_if! {
                             if #[cfg(any(
                                 feature = "hotpath-alloc-bytes-total",
                                 feature = "hotpath-alloc-bytes-max",
@@ -159,7 +159,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! {
                 #vis #sig {
-                    ::hotpath::cfg_if::cfg_if! {
+                    cfg_if::cfg_if! {
                         if #[cfg(any(
                             feature = "hotpath-alloc-bytes-total",
                             feature = "hotpath-alloc-bytes-max",

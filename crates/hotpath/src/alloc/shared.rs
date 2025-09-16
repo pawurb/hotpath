@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub fn format_bytes(bytes: u64) -> String {
     if bytes == 0 {
         return "0 B".to_string();

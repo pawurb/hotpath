@@ -1,4 +1,3 @@
-pub use cfg_if;
 pub use hotpath_macros::{main, measure};
 
 cfg_if::cfg_if! {
@@ -8,9 +7,9 @@ cfg_if::cfg_if! {
         feature = "hotpath-alloc-count-total",
         feature = "hotpath-alloc-count-max"
     ))] {
-        pub mod alloc;
+        mod alloc;
 
-        // Shared global allocator
+        // Memory allocations profiling using a custom global allocator
         #[global_allocator]
         static GLOBAL: alloc::allocator::CountingAllocator = alloc::allocator::CountingAllocator {};
         pub use alloc::shared::NoopAsyncAllocGuard;
@@ -21,9 +20,9 @@ cfg_if::cfg_if! {
         }
     } else {
         // Time-based profiling (when no allocation features are enabled)
-        pub mod time;
+        mod time;
         pub use time::guard::TimeGuard;
-        pub use time::state::send_duration_measurement;
+        use time::state::send_duration_measurement;
         use crate::time::{
             report::StatsTable,
             state::{FunctionStats, HotPathState, Measurement, process_measurement},
@@ -33,28 +32,28 @@ cfg_if::cfg_if! {
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "hotpath-alloc-bytes-max")] {
-        pub mod alloc_bytes_max;
+        mod alloc_bytes_max;
         pub use alloc_bytes_max::{core::AllocationInfo, guard::AllocGuard};
         use crate::alloc_bytes_max::{
             report::StatsTable,
             state::{FunctionStats, HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
-        pub mod alloc_bytes_total;
+        mod alloc_bytes_total;
         pub use alloc_bytes_total::{core::AllocationInfo, guard::AllocGuard};
         use crate::alloc_bytes_total::{
             report::StatsTable,
             state::{FunctionStats, HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-max")] {
-        pub mod alloc_count_max;
+        mod alloc_count_max;
         pub use alloc_count_max::{core::AllocationInfo, guard::AllocGuard};
         use crate::alloc_count_max::{
             report::StatsTable,
             state::{FunctionStats, HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-total")] {
-        pub mod alloc_count_total;
+        mod alloc_count_total;
         pub use alloc_count_total::{core::AllocationInfo, guard::AllocGuard};
         use crate::alloc_count_total::{
             report::StatsTable,
@@ -83,7 +82,7 @@ use std::time::Instant;
 #[macro_export]
 macro_rules! measure_block {
     ($label:expr, $expr:expr) => {{
-        $crate::cfg_if::cfg_if! {
+        cfg_if::cfg_if! {
             if #[cfg(any(
                 feature = "hotpath-alloc-bytes-total",
                 feature = "hotpath-alloc-bytes-max",
@@ -112,7 +111,6 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 
-// Compile-time check: ensure only one allocation feature is enabled at a time
 #[cfg(all(
     feature = "hotpath-alloc-bytes-total",
     any(

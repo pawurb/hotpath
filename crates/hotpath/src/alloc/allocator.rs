@@ -55,6 +55,3 @@ unsafe impl GlobalAlloc for CountingAllocator {
         }
     }
 }
-
-/// Re-export the allocator for easy access as alloc::core::allocator
-pub use CountingAllocator as allocator;
