@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.6] - 2025-09-16
+
+### 🚀 Features
+
+- Support multiple reports per compilation [#2]
+
+### 🐛 Bug Fixes
+
+- Include tokio dependency [#13]
+
+### ⚙️ Miscellaneous Tasks
+
+- Cleanup deps and imports
+- Release v0.2.6
+
 ## [0.2.5] - 2025-09-15
 
 ### 🚀 Features
