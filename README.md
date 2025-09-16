@@ -164,7 +164,7 @@ An opt-in attribute macro that instruments functions to send timing measurements
 
 Macro that measures the execution time of a code block with a static string label.
 
-## Using `hotpath::main` macro vs `hotpath::init` guard
+### Using `hotpath::main` macro vs `hotpath::init` guard
 
 The `#[hotpath::main]` macro is convenient for most use cases, but `hotpath::init()` provides more control over when profiling starts and stops. 
 
@@ -175,7 +175,7 @@ Key differences:
 
 Only one hotpath guard may be alive at a time, regardless of whether it was created by the `main` macro or by `init()`. If a second guard is created, the library will panic. 
 
-### Using `hotpath::init()` for more control
+#### Using `hotpath::init()` for more control
 
 ```rust
 use std::time::Duration;
@@ -204,7 +204,7 @@ fn main() {
 }
 ```
 
-### Using in unit tests
+#### Using in unit tests
 
 In unit tests you can profile each individual test case:
 
