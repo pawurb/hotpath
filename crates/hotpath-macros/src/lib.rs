@@ -87,8 +87,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let format_token = format.to_tokens();
 
     let output = quote! {
-        static __hotpath_main_guard: () = ();
-
         #vis #sig {
             let _hotpath = {
                 fn __caller_fn() {}

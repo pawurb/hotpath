@@ -206,4 +206,36 @@ pub mod tests {
         assert!(stdout.contains("\"p75\""));
         assert!(stdout.contains("\"p95\"")); // Custom percentile in JSON
     }
+
+    #[test]
+    fn test_unit_test_multiple_guards() {
+        let output = Command::new("cargo")
+            .args([
+                "test",
+                "--example",
+                "unit_test",
+                "--features",
+                "hotpath",
+                "--",
+                "--test-threads",
+                "1",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let expected = ["unit_test::async_function", "unit_test::sync_function"];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected {
+            assert!(
+                stdout.contains(expected),
+                "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
 }

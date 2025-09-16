@@ -107,6 +107,7 @@ macro_rules! measure_block {
     }};
 }
 
+use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
@@ -136,66 +137,66 @@ compile_error!("Only one allocation feature can be enabled at a time");
 ))]
 compile_error!("Only one allocation feature can be enabled at a time");
 
-static HOTPATH_STATE: OnceLock<Arc<RwLock<HotPathState>>> = OnceLock::new();
+static HOTPATH_STATE: OnceLock<ArcSwapOption<RwLock<HotPathState>>> = OnceLock::new();
 
 pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath {
-    if HOTPATH_STATE.get().is_some() {
-        panic!("hotpath::init() can be called only once");
-    }
-
     let percentiles = percentiles.to_vec();
 
-    let state = HOTPATH_STATE.get_or_init(|| {
-        let (tx, rx) = bounded::<Measurement>(10000);
-        let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
-        let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
-        let start_time = Instant::now();
+    let arc_swap = HOTPATH_STATE.get_or_init(|| ArcSwapOption::from(None));
 
-        let state_arc = Arc::new(RwLock::new(HotPathState {
-            sender: Some(tx),
-            shutdown_tx: Some(shutdown_tx),
-            completion_rx: Some(completion_rx),
-            start_time,
-            caller_name,
-            percentiles,
-            format,
-        }));
+    if arc_swap.load().is_some() {
+        panic!("More than one _hotpath guard cannot be alive at the same time.");
+    }
 
-        thread::Builder::new()
-            .name("hotpath-worker".into())
-            .spawn(move || {
-                let mut local_stats = HashMap::<&'static str, FunctionStats>::new();
+    let (tx, rx) = bounded::<Measurement>(10000);
+    let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
+    let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
+    let start_time = Instant::now();
 
-                loop {
-                    select! {
-                        recv(rx) -> result => {
-                            match result {
-                                Ok(measurement) => {
-                                    process_measurement(&mut local_stats, measurement);
-                                }
-                                Err(_) => break, // Channel disconnected
-                            }
-                        }
-                        recv(shutdown_rx) -> _ => {
-                            // Process remaining messages after shutdown signal
-                            while let Ok(measurement) = rx.try_recv() {
+    let state_arc = Arc::new(RwLock::new(HotPathState {
+        sender: Some(tx),
+        shutdown_tx: Some(shutdown_tx),
+        completion_rx: Some(completion_rx),
+        start_time,
+        caller_name,
+        percentiles,
+        format,
+    }));
+
+    thread::Builder::new()
+        .name("hotpath-worker".into())
+        .spawn(move || {
+            let mut local_stats = HashMap::<&'static str, FunctionStats>::new();
+
+            loop {
+                select! {
+                    recv(rx) -> result => {
+                        match result {
+                            Ok(measurement) => {
                                 process_measurement(&mut local_stats, measurement);
                             }
-                            break;
+                            Err(_) => break, // Channel disconnected
                         }
                     }
+                    recv(shutdown_rx) -> _ => {
+                        // Process remaining messages after shutdown signal
+                        while let Ok(measurement) = rx.try_recv() {
+                            process_measurement(&mut local_stats, measurement);
+                        }
+                        break;
+                    }
                 }
+            }
 
-                // Send stats via completion channel
-                let _ = completion_tx.send(local_stats);
-            })
-            .expect("Failed to spawn hotpath-worker thread");
+            // Send stats via completion channel
+            let _ = completion_tx.send(local_stats);
+        })
+        .expect("Failed to spawn hotpath-worker thread");
 
-        state_arc
-    });
+    arc_swap.store(Some(Arc::clone(&state_arc)));
 
     HotPath {
-        state: Arc::clone(state),
+        state: Arc::clone(&state_arc),
     }
 }
 
@@ -242,6 +243,10 @@ impl Drop for HotPath {
                     }
                 }
             }
+        }
+
+        if let Some(arc_swap) = HOTPATH_STATE.get() {
+            arc_swap.store(None);
         }
     }
 }

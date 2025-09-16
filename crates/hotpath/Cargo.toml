@@ -17,6 +17,7 @@ hotpath-alloc-count-total = []
 hotpath-alloc-count-max = []
 
 [dependencies]
+arc-swap = "1.7"
 cfg-if = "1.0"
 colored = { version = "3" }
 crossbeam-channel = "0.5"

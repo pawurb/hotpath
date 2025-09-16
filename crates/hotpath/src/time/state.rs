@@ -95,8 +95,12 @@ pub(crate) fn process_measurement(
 use crate::HOTPATH_STATE;
 
 pub fn send_duration_measurement(name: &'static str, duration: Duration) {
-    let Some(state) = HOTPATH_STATE.get() else {
+    let Some(arc_swap) = HOTPATH_STATE.get() else {
         panic!("hotpath::init() must be called when --features hotpath is enabled");
+    };
+
+    let Some(state) = arc_swap.load_full() else {
+        return;
     };
 
     let Ok(state_guard) = state.read() else {

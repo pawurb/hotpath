@@ -154,7 +154,7 @@ It ensures that tokio runs in a `current_thread` runtime mode if any of the allo
 
 `#[cfg_attr(feature = "hotpath", hotpath::main]`
 
-Attribute macro that initializes the background measurement processing when applied to your main function. Can only be used once per program. 
+Attribute macro that initializes the background measurement processing when applied.
 
 `#[cfg_attr(feature = "hotpath", hotpath::measure)]`
 
@@ -163,6 +163,88 @@ An opt-in attribute macro that instruments functions to send timing measurements
 `hotpath::measure_block!(label, expr)`
 
 Macro that measures the execution time of a code block with a static string label.
+
+## Using `hotpath::main` macro vs `hotpath::init` guard
+
+The `#[hotpath::main]` macro is convenient for most use cases, but `hotpath::init()` provides more control over when profiling starts and stops. 
+
+Key differences:
+
+- **`#[hotpath::main]`** - Automatic initialization and cleanup, report printed at program exit
+- **`let _guard = hotpath::init()`** - Manual control, report printed when guard is dropped, so you can fine-tune the measured scope. 
+
+Only one hotpath guard may be alive at a time, regardless of whether it was created by the `main` macro or by `init()`. If a second guard is created, the library will panic. 
+
+### Using `hotpath::init()` for more control
+
+```rust
+use std::time::Duration;
+
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
+fn example_function() {
+    std::thread::sleep(Duration::from_millis(10));
+}
+
+fn main() {
+    #[cfg(feature = "hotpath")]
+    let _guard = hotpath::init(
+        "my_program".to_string(),
+        &[50, 95, 99],
+        hotpath::Format::Table
+    );
+
+    example_function();
+
+    // This will print the report.
+    #[cfg(feature = "hotpath")]
+    drop(_hotpath);
+
+    // Immediate exit (no drops); `#[hotpath::main]` wouldn't print.
+    std::process::exit(1);
+}
+```
+
+### Using in unit tests
+
+In unit tests you can profile each individual test case:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sync_function() {
+        #[cfg(feature = "hotpath")]
+        let _hotpath = hotpath::init(
+            "test_sync_function".to_string(),
+            &[50, 90, 95],
+            hotpath::Format::Table,
+        );
+        sync_function();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn test_async_function() {
+        #[cfg(feature = "hotpath")]
+        let _hotpath = hotpath::init(
+            "test_async_function".to_string(),
+            &[50, 90, 95],
+            hotpath::Format::Table,
+        );
+
+        async_function().await;
+    }
+}
+```
+
+Run tests with profiling enabled:
+
+```bash
+cargo test --features hotpath -- --test-threads=1
+```
+
+Note: Use `--test-threads=1` to ensure tests run sequentially, as only one hotpath guard can be active at a time.
 
 ### Percentiles Support
 
@@ -224,6 +306,7 @@ You can combine both percentiles and format parameters:
 ```rust
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
 ```
+
 
 ## Benchmarking
 

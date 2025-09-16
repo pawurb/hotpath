@@ -114,10 +114,14 @@ pub(crate) fn process_measurement(
 use crate::HOTPATH_STATE;
 
 pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo) {
-    let Some(state) = HOTPATH_STATE.get() else {
+    let Some(arc_swap) = HOTPATH_STATE.get() else {
         panic!(
             "hotpath::init() must be called when --features hotpath-alloc-count-total is enabled"
         );
+    };
+
+    let Some(state) = arc_swap.load_full() else {
+        return;
     };
 
     let Ok(state_guard) = state.read() else {
