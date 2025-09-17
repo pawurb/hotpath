@@ -16,8 +16,6 @@ hotpath = []
 proc-macro = true
 
 [dependencies]
-cfg-if = "1.0"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
-tokio = { version = "1.47", default-features = false }
