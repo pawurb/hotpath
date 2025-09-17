@@ -1,3 +1,4 @@
+pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
 
 cfg_if::cfg_if! {
@@ -8,6 +9,7 @@ cfg_if::cfg_if! {
         feature = "hotpath-alloc-count-max"
     ))] {
         mod alloc;
+        pub use tokio::runtime::{Handle, RuntimeFlavor};
 
         // Memory allocations profiling using a custom global allocator
         #[global_allocator]

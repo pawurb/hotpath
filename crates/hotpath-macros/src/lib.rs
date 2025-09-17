@@ -126,14 +126,14 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
                 #vis #sig {
                     async {
-                        cfg_if::cfg_if! {
+                        hotpath::cfg_if! {
                             if #[cfg(any(
                                 feature = "hotpath-alloc-bytes-total",
                                 feature = "hotpath-alloc-bytes-max",
                                 feature = "hotpath-alloc-count-total",
                                 feature = "hotpath-alloc-count-max"
                             ))] {
-                                use tokio::runtime::{Handle, RuntimeFlavor};
+                                use hotpath::{Handle, RuntimeFlavor};
                                 let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
 
                                 let _guard = match runtime_flavor {
@@ -157,7 +157,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! {
                 #vis #sig {
-                    cfg_if::cfg_if! {
+                    hotpath::cfg_if! {
                         if #[cfg(any(
                             feature = "hotpath-alloc-bytes-total",
                             feature = "hotpath-alloc-bytes-max",
