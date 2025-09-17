@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.8] - 2025-09-17
+
+### 🐛 Bug Fixes
+
+- Fix macro dependencies [#13][#2]
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.2.8
+
 ## [0.2.6] - 2025-09-16
 
 ### 🚀 Features
