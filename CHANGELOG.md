@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.9] - 2025-09-18
+
+### 🐛 Bug Fixes
+
+- Include tokio only for alloc features
+- Fix measure_block cfg_if import [#13]
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.2.9
+
 ## [0.2.8] - 2025-09-17
 
 ### 🐛 Bug Fixes
