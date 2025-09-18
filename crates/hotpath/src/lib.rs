@@ -84,7 +84,7 @@ use std::time::Instant;
 #[macro_export]
 macro_rules! measure_block {
     ($label:expr, $expr:expr) => {{
-        cfg_if::cfg_if! {
+        hotpath::cfg_if! {
             if #[cfg(any(
                 feature = "hotpath-alloc-bytes-total",
                 feature = "hotpath-alloc-bytes-max",
