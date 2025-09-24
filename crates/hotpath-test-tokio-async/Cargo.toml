@@ -1,0 +1,61 @@
+[package]
+name = "hotpath-test-tokio-async"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies]
+hotpath = { path = "../hotpath" }
+tokio = { version = "1.0", features = ["full"] }
+
+[features]
+default = []
+hotpath = ["hotpath/hotpath"]
+hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
+hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
+hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-count-max = ["hotpath/hotpath-alloc-count-max"]
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[[example]]
+name = "benchmark"
+path = "examples/benchmark.rs"
+
+[[example]]
+name = "async_multithread"
+path = "examples/async_multithread.rs"
+
+[[example]]
+name = "main_empty"
+path = "examples/main_empty.rs"
+
+[[example]]
+name = "main_format"
+path = "examples/main_format.rs"
+
+[[example]]
+name = "main_percentiles"
+path = "examples/main_percentiles.rs"
+
+[[example]]
+name = "main_percentiles_format"
+path = "examples/main_percentiles_format.rs"
+
+[[example]]
+name = "early_returns"
+path = "examples/early_returns.rs"
+
+[[example]]
+name = "custom_guard"
+path = "examples/custom_guard.rs"
+
+[[example]]
+name = "unit_test"
+path = "examples/unit_test.rs"
+
+[[example]]
+name = "unsupported_async"
+path = "examples/unsupported_async.rs"
