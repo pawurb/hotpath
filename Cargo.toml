@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/hotpath-macros", "crates/hotpath"]
+members = ["crates/hotpath-macros", "crates/hotpath", "crates/hotpath-test-tokio-async", "crates/hotpath-test-smol-async"]
 resolver = "2"
 
 [workspace.dependencies]

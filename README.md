@@ -307,12 +307,19 @@ You can combine both percentiles and format parameters:
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
 ```
 
-
 ## Benchmarking
 
 Measure overhead of profiling 1 million empty method calls with [hyperfine](https://github.com/sharkdp/hyperfine):
 
+Timing:
 ```
 cargo build --example benchmark --features hotpath --release
+hyperfine --warmup 3 './target/release/examples/benchmark'
+```
+
+Allocations:
+
+```
+cargo build --example benchmark --features='hotpath,hotpath-alloc-count-max' --release
 hyperfine --warmup 3 './target/release/examples/benchmark'
 ```

@@ -1,0 +1,21 @@
+[package]
+name = "hotpath-test-smol-async"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[dependencies]
+hotpath = { path = "../hotpath" }
+smol = "2.0"
+
+[features]
+default = []
+hotpath = ["hotpath/hotpath"]
+hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
+hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
+hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-count-max = ["hotpath/hotpath-alloc-count-max"]
+
+[[example]]
+name = "basic_smol"
+path = "examples/basic_smol.rs"

@@ -20,7 +20,15 @@ pub mod tests {
             };
 
             let output = Command::new("cargo")
-                .args(["run", "--example", "basic", "--features", &features_arg])
+                .args([
+                    "run",
+                    "-p",
+                    "hotpath-test-tokio-async",
+                    "--example",
+                    "basic",
+                    "--features",
+                    &features_arg,
+                ])
                 .output()
                 .expect("Failed to execute command");
 
@@ -42,7 +50,7 @@ pub mod tests {
             for expected in expected {
                 assert!(
                     stdout.contains(expected),
-                    "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
+                    "Expected:\n{expected}\n\nGot:\n{stdout}",
                 );
             }
         }
@@ -67,6 +75,8 @@ pub mod tests {
             let output = Command::new("cargo")
                 .args([
                     "run",
+                    "-p",
+                    "hotpath-test-tokio-async",
                     "--example",
                     "early_returns",
                     "--features",
@@ -90,7 +100,7 @@ pub mod tests {
             for expected in expected {
                 assert!(
                     stdout.contains(expected),
-                    "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
+                    "Expected:\n{expected}\n\nGot:\n{stdout}",
                 );
             }
         }
@@ -101,6 +111,8 @@ pub mod tests {
         let output = Command::new("cargo")
             .args([
                 "run",
+                "-p",
+                "hotpath-test-tokio-async",
                 "--example",
                 "unsupported_async",
                 "--features",
@@ -110,12 +122,12 @@ pub mod tests {
             .expect("Failed to execute command");
         let stdout = String::from_utf8_lossy(&output.stdout);
 
-        let expected = ["N/A*"];
+        let expected = ["N/A*", "only available for tokio current_thread"];
 
         for expected in expected {
             assert!(
                 stdout.contains(expected),
-                "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
             );
         }
     }
@@ -123,7 +135,15 @@ pub mod tests {
     #[test]
     fn test_main_empty_params() {
         let output = Command::new("cargo")
-            .args(["run", "--example", "main_empty", "--features", "hotpath"])
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "main_empty",
+                "--features",
+                "hotpath",
+            ])
             .output()
             .expect("Failed to execute command");
 
@@ -143,6 +163,8 @@ pub mod tests {
         let output = Command::new("cargo")
             .args([
                 "run",
+                "-p",
+                "hotpath-test-tokio-async",
                 "--example",
                 "main_percentiles",
                 "--features",
@@ -167,7 +189,15 @@ pub mod tests {
     #[test]
     fn test_main_format_param() {
         let output = Command::new("cargo")
-            .args(["run", "--example", "main_format", "--features", "hotpath"])
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "main_format",
+                "--features",
+                "hotpath",
+            ])
             .output()
             .expect("Failed to execute command");
 
@@ -187,6 +217,8 @@ pub mod tests {
         let output = Command::new("cargo")
             .args([
                 "run",
+                "-p",
+                "hotpath-test-tokio-async",
                 "--example",
                 "main_percentiles_format",
                 "--features",
@@ -212,6 +244,8 @@ pub mod tests {
         let output = Command::new("cargo")
             .args([
                 "test",
+                "-p",
+                "hotpath-test-tokio-async",
                 "--example",
                 "unit_test",
                 "--features",
@@ -234,7 +268,40 @@ pub mod tests {
         for expected in expected {
             assert!(
                 stdout.contains(expected),
-                "Output did not match expected.\nExpected:\n{expected}\n\nGot:\n{stdout}",
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_async_smol_alloc_profiling_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-smol-async",
+                "--example",
+                "basic_smol",
+                "--features",
+                "hotpath,hotpath-alloc-bytes-max",
+                "--",
+                "--nocapture",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let expected = ["N/A*", "only available for tokio current_thread"];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
             );
         }
     }
