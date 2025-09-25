@@ -307,6 +307,10 @@ You can combine both percentiles and format parameters:
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
 ```
 
+### `hotpath-off` feature
+
+Profiling features are mutually exclusive. To make the lib work with `--all-features` config, there's an additional `hotpath-off` flag, which disables profiling.
+
 ## Benchmarking
 
 Measure overhead of profiling 100k method calls with [hyperfine](https://github.com/sharkdp/hyperfine):
