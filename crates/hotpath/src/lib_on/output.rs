@@ -19,6 +19,16 @@ use serde::{
 use std::collections::HashMap;
 use std::time::Duration;
 
+pub trait Reporter {
+    fn report(
+        &self,
+        stats: &HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        caller_name: &str,
+        percentiles: &[u8],
+    );
+}
+
 #[allow(dead_code)]
 #[derive(Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -215,40 +225,6 @@ pub(crate) trait Tableable<'a> {
     ) -> Self;
 }
 
-pub fn display_performance_summary(
-    stats: &HashMap<&'static str, FunctionStats>,
-    total_elapsed: Duration,
-    caller_name: &str,
-    percentiles: &[u8],
-    format: super::Format,
-) {
-    let has_data = stats.values().any(|s| s.has_data);
-
-    if !has_data {
-        println!("\nNo measurement data available.");
-        return;
-    }
-
-    match format {
-        super::Format::Table => {
-            display_table(
-                StatsTable::new(stats, total_elapsed, percentiles.to_vec()),
-                caller_name,
-            );
-        }
-        super::Format::Json => {
-            let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
-                .to_serializable_table(caller_name);
-            println!("{}", serde_json::to_string(&json).unwrap());
-        }
-        super::Format::JsonPretty => {
-            let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
-                .to_serializable_table(caller_name);
-            println!("{}", serde_json::to_string_pretty(&json).unwrap());
-        }
-    }
-}
-
 pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
     let title = format!(
         "\n{} No measurements recorded from {} (Total time: {:.2?})",
@@ -281,4 +257,68 @@ pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &st
     println!("  {}", "    // your code here".dimmed());
     println!("  {}", "});".cyan());
     println!();
+}
+
+pub struct TableReporter;
+
+impl Reporter for TableReporter {
+    fn report(
+        &self,
+        stats: &HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        caller_name: &str,
+        percentiles: &[u8],
+    ) {
+        if stats.is_empty() {
+            display_no_measurements_message(total_elapsed, caller_name);
+            return;
+        }
+
+        display_table(
+            StatsTable::new(stats, total_elapsed, percentiles.to_vec()),
+            caller_name,
+        );
+    }
+}
+
+pub struct JsonReporter;
+
+impl Reporter for JsonReporter {
+    fn report(
+        &self,
+        stats: &HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        caller_name: &str,
+        percentiles: &[u8],
+    ) {
+        if stats.is_empty() {
+            display_no_measurements_message(total_elapsed, caller_name);
+            return;
+        }
+
+        let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
+            .to_serializable_table(caller_name);
+        println!("{}", serde_json::to_string(&json).unwrap());
+    }
+}
+
+pub struct JsonPrettyReporter;
+
+impl Reporter for JsonPrettyReporter {
+    fn report(
+        &self,
+        stats: &HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        caller_name: &str,
+        percentiles: &[u8],
+    ) {
+        if stats.is_empty() {
+            display_no_measurements_message(total_elapsed, caller_name);
+            return;
+        }
+
+        let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
+            .to_serializable_table(caller_name);
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+    }
 }

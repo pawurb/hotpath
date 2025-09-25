@@ -7,6 +7,8 @@ edition = "2021"
 [dependencies]
 hotpath = { path = "../hotpath" }
 tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 [features]
 default = []
@@ -60,3 +62,11 @@ path = "examples/unit_test.rs"
 [[example]]
 name = "unsupported_async"
 path = "examples/unsupported_async.rs"
+
+[[example]]
+name = "file_reporter"
+path = "examples/file_reporter.rs"
+
+[[example]]
+name = "tracing_reporter"
+path = "examples/tracing_reporter.rs"

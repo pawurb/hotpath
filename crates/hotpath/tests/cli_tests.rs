@@ -363,4 +363,96 @@ pub mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_json_file_reporter_output() {
+        use std::fs;
+        use std::path::Path;
+
+        let report_path = "hotpath_report.txt";
+        if Path::new(report_path).exists() {
+            fs::remove_file(report_path).ok();
+        }
+
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "file_reporter",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        assert!(
+            Path::new(report_path).exists(),
+            "Custom report file was not created"
+        );
+
+        let report_content = fs::read_to_string(report_path).expect("Failed to read report file");
+
+        let expected_content = [
+            "HotPath Report for: main",
+            "Functions measured: 3",
+            "file_reporter::async_function: 100 calls",
+            "file_reporter::sync_function: 100 calls",
+            "custom_block: 100 calls",
+        ];
+
+        for expected in expected_content {
+            assert!(
+                report_content.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{report_content}",
+            );
+        }
+
+        fs::remove_file(report_path).ok();
+    }
+
+    #[test]
+    fn test_tracing_reporter_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "tracing_reporter",
+                "--features",
+                "hotpath",
+            ])
+            .env("RUST_LOG", "info")
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        let expected_content = [
+            "HotPath Report for: main",
+            "Functions measured: 3",
+            "tracing_reporter::async_function: 100 calls",
+            "tracing_reporter::sync_function: 100 calls",
+            "custom_block: 100 calls",
+        ];
+
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\\n{expected}\\n\\nGot:\\n{stdout}",
+            );
+        }
+    }
 }

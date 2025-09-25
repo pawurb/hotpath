@@ -310,6 +310,12 @@ You can combine both percentiles and format parameters:
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
 ```
 
+## Custom Reporters
+
+You can implement your own reporting to control how profiling results are handled. This allows you to plug `hotpath` into existing tools like loggers, CI pipelines, or monitoring systems.
+
+For a complete working example, see [`examples/file_reporter.rs`](crates/hotpath-test-tokio-async/examples/file_reporter.rs) and [`examples/tracing_reporter.rs`](crates/hotpath-test-tokio-async/examples/tracing_reporter.rs) 
+
 ## Benchmarking
 
 Measure overhead of profiling 100k method calls with [hyperfine](https://github.com/sharkdp/hyperfine):

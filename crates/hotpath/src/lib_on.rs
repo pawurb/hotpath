@@ -1,5 +1,6 @@
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
+pub use output::Reporter;
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -24,9 +25,10 @@ cfg_if::cfg_if! {
         // Time-based profiling (when no allocation features are enabled)
         mod time;
         pub use time::guard::TimeGuard;
+        pub use time::state::FunctionStats;
         use time::{
             report::StatsTable,
-            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+            state::{HotPathState, Measurement, process_measurement},
         };
     }
 }
@@ -35,30 +37,34 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "hotpath-alloc-bytes-max")] {
         mod alloc_bytes_max;
         pub use alloc_bytes_max::{core::AllocationInfo, guard::AllocGuard};
+        pub use alloc_bytes_max::state::FunctionStats;
         use alloc_bytes_max::{
             report::StatsTable,
-            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+            state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
         mod alloc_bytes_total;
         pub use alloc_bytes_total::{core::AllocationInfo, guard::AllocGuard};
+        pub use alloc_bytes_total::state::FunctionStats;
         use alloc_bytes_total::{
             report::StatsTable,
-            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+            state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-max")] {
         mod alloc_count_max;
         pub use alloc_count_max::{core::AllocationInfo, guard::AllocGuard};
+        pub use alloc_count_max::state::FunctionStats;
         use alloc_count_max::{
             report::StatsTable,
-            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+            state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-total")] {
         mod alloc_count_total;
         pub use alloc_count_total::{core::AllocationInfo, guard::AllocGuard};
+        pub use alloc_count_total::state::FunctionStats;
         use alloc_count_total::{
             report::StatsTable,
-            state::{FunctionStats, HotPathState, Measurement, process_measurement},
+            state::{HotPathState, Measurement, process_measurement},
         };
     }
 }
@@ -74,7 +80,6 @@ pub enum Format {
 }
 
 use crossbeam_channel::{bounded, select};
-use output::{display_no_measurements_message, display_performance_summary};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Instant;
@@ -196,13 +201,26 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
 
     arc_swap.store(Some(Arc::clone(&state_arc)));
 
+    let reporter: Box<dyn Reporter> = match format {
+        Format::Table => Box::new(output::TableReporter),
+        Format::Json => Box::new(output::JsonReporter),
+        Format::JsonPretty => Box::new(output::JsonPrettyReporter),
+    };
+
     HotPath {
         state: Arc::clone(&state_arc),
+        reporter,
     }
 }
-
 pub struct HotPath {
     state: Arc<RwLock<HotPathState>>,
+    reporter: Box<dyn Reporter>,
+}
+
+impl HotPath {
+    pub fn set_reporter(&mut self, reporter: Box<dyn Reporter>) {
+        self.reporter = reporter;
+    }
 }
 
 impl Drop for HotPath {
@@ -210,7 +228,7 @@ impl Drop for HotPath {
         let state: Arc<RwLock<HotPathState>> = Arc::clone(&self.state);
 
         // Signal shutdown and wait for processing thread to complete
-        let (shutdown_tx, completion_rx, _end_time) = {
+        let (shutdown_tx, completion_rx, end_time) = {
             let Ok(mut state_guard) = state.write() else {
                 return;
             };
@@ -230,18 +248,13 @@ impl Drop for HotPath {
         if let Some(rx) = completion_rx {
             if let Ok(stats) = rx.recv() {
                 if let Ok(state_guard) = state.read() {
-                    let total_elapsed = _end_time.duration_since(state_guard.start_time);
-                    if stats.is_empty() {
-                        display_no_measurements_message(total_elapsed, &state_guard.caller_name);
-                    } else {
-                        display_performance_summary(
-                            &stats,
-                            total_elapsed,
-                            &state_guard.caller_name,
-                            &state_guard.percentiles,
-                            state_guard.format,
-                        );
-                    }
+                    let total_elapsed = end_time.duration_since(state_guard.start_time);
+                    self.reporter.report(
+                        &stats,
+                        total_elapsed,
+                        &state_guard.caller_name,
+                        &state_guard.percentiles,
+                    );
                 }
             }
         }
