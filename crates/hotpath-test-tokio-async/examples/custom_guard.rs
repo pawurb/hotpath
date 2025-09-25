@@ -63,5 +63,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // so the report would not be printed for `hotpath::main` macro.
     std::process::exit(1);
 
+    #[allow(unreachable_code)]
     Ok(())
 }
