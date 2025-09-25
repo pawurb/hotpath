@@ -27,9 +27,12 @@ hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
 hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
 hotpath-alloc-count-total= ["hotpath/hotpath-alloc-count-total"]
 hotpath-alloc-count-max= ["hotpath/hotpath-alloc-count-max"]
+hotpath-off = ["hotpath/hotpath-off"]
 ```
 
 This config ensures that the lib has **zero** overhead unless explicitly enabled via a `hotpath` feature.
+
+Profiling features are mutually exclusive. To ensure compatibility with `--all-features` setting, the crate defines an additional `hotpath-off` flag. This is handled automatically - you should never need to enable it manually.
 
 ## Usage
 
@@ -306,10 +309,6 @@ You can combine both percentiles and format parameters:
 ```rust
 #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
 ```
-
-### `hotpath-off` feature
-
-Profiling features are mutually exclusive. To make the lib work with `--all-features` config, there's an additional `hotpath-off` flag, which disables profiling.
 
 ## Benchmarking
 

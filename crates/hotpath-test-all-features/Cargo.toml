@@ -6,7 +6,7 @@ edition = "2021"
 
 [features]
 default = []
-hotpath = ["hotpath/hotpath"]
+hotpath = ["dep:hotpath", "hotpath/hotpath"]
 hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
 hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
 hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
@@ -14,5 +14,5 @@ hotpath-alloc-count-max = ["hotpath/hotpath-alloc-count-max"]
 hotpath-off = ["hotpath/hotpath-off"]
 
 [dependencies]
-hotpath = { path = "../hotpath" }
+hotpath = { path = "../hotpath", optional = true }
 tokio = { version = "1.47", features = ["full"] }
