@@ -11,6 +11,7 @@ categories = ["development-tools"]
 [features]
 default = []
 hotpath = []
+hotpath-off = []
 
 [lib]
 proc-macro = true

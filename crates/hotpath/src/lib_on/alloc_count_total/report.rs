@@ -2,9 +2,8 @@ use colored::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use super::super::output::Tableable;
 use super::state::FunctionStats;
-use crate::alloc::shared::format_bytes;
-use crate::output::Tableable;
 
 pub struct StatsTable<'a> {
     stats: &'a HashMap<&'static str, FunctionStats>,
@@ -25,15 +24,6 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
         }
     }
 
-    fn description(&self, caller_name: &str) -> String {
-        format!(
-            "\n{} Total bytes allocation statistics from {} (Total time: {:.2?}):",
-            "[hotpath]".blue().bold(),
-            caller_name.yellow().bold(),
-            self.total_elapsed
-        )
-    }
-
     fn percentiles(&self) -> Vec<u8> {
         self.percentiles.clone()
     }
@@ -42,24 +32,33 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
         self.stats.values().any(|s| s.has_unsupported_async)
     }
 
+    fn description(&self, caller_name: &str) -> String {
+        format!(
+            "\n{} Total count allocation statistics from {} (Total time: {:.2?}):",
+            "[hotpath]".blue().bold(),
+            caller_name.yellow().bold(),
+            self.total_elapsed
+        )
+    }
+
     fn rows(&self) -> Vec<Vec<String>> {
         let mut sorted_stats: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
 
-        // Calculate total bytes across all functions for percentage calculation
-        let grand_total_bytes: u64 = sorted_stats
+        // Calculate total count across all functions for percentage calculation
+        let grand_total_count: u64 = sorted_stats
             .iter()
-            .map(|(_, stats)| stats.total_bytes())
+            .map(|(_, stats)| stats.total_count())
             .sum();
 
         // Sort by % Total descending
         sorted_stats.sort_by(|(_, a), (_, b)| {
-            let a_percentage = if grand_total_bytes > 0 {
-                (a.total_bytes() as f64 / grand_total_bytes as f64) * 100.0
+            let a_percentage = if grand_total_count > 0 {
+                (a.total_count() as f64 / grand_total_count as f64) * 100.0
             } else {
                 0.0
             };
-            let b_percentage = if grand_total_bytes > 0 {
-                (b.total_bytes() as f64 / grand_total_bytes as f64) * 100.0
+            let b_percentage = if grand_total_count > 0 {
+                (b.total_count() as f64 / grand_total_count as f64) * 100.0
             } else {
                 0.0
             };
@@ -71,8 +70,8 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
         sorted_stats
             .into_iter()
             .map(|(function_name, stats)| {
-                let percentage = if grand_total_bytes > 0 {
-                    (stats.total_bytes() as f64 / grand_total_bytes as f64) * 100.0
+                let percentage = if grand_total_count > 0 {
+                    (stats.total_count() as f64 / grand_total_count as f64) * 100.0
                 } else {
                     0.0
                 };
@@ -90,7 +89,7 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
                     vec![
                         short_name,
                         stats.count.to_string(),
-                        format_bytes(stats.avg_bytes()),
+                        stats.avg_count().to_string(),
                     ]
                 };
 
@@ -98,8 +97,8 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
                     if stats.has_unsupported_async {
                         row.push("N/A*".to_string());
                     } else {
-                        let bytes_total = stats.bytes_total_percentile(p as f64);
-                        row.push(format_bytes(bytes_total));
+                        let count_total = stats.count_total_percentile(p as f64);
+                        row.push(count_total.to_string());
                     }
                 }
 
@@ -107,7 +106,7 @@ impl<'a> Tableable<'a> for StatsTable<'a> {
                     row.push("N/A*".to_string());
                     row.push("N/A*".to_string());
                 } else {
-                    row.push(format_bytes(stats.total_bytes()));
+                    row.push(stats.total_count().to_string());
                     row.push(format!("{:.2}%", percentage));
                 }
 

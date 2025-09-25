@@ -36,31 +36,31 @@ impl Drop for NoopAsyncAllocGuard {
     fn drop(&mut self) {
         cfg_if::cfg_if! {
             if #[cfg(feature = "hotpath-alloc-bytes-max")] {
-                let alloc_info = crate::alloc_bytes_max::core::AllocationInfo {
+                let alloc_info = crate::lib_on::alloc_bytes_max::core::AllocationInfo {
                     bytes_current: 0,
                     bytes_max: 0,
                     unsupported_async: true,
                 };
-                crate::alloc_bytes_max::state::send_alloc_measurement(self.name, alloc_info);
+                crate::lib_on::alloc_bytes_max::state::send_alloc_measurement(self.name, alloc_info);
             } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
-                let alloc_info = crate::alloc_bytes_total::core::AllocationInfo {
+                let alloc_info = crate::lib_on::alloc_bytes_total::core::AllocationInfo {
                     bytes_total: 0,
                     unsupported_async: true,
                 };
-                crate::alloc_bytes_total::state::send_alloc_measurement(self.name, alloc_info);
+                crate::lib_on::alloc_bytes_total::state::send_alloc_measurement(self.name, alloc_info);
             } else if #[cfg(feature = "hotpath-alloc-count-max")] {
-                let alloc_info = crate::alloc_count_max::core::AllocationInfo {
+                let alloc_info = crate::lib_on::alloc_count_max::core::AllocationInfo {
                     count_current: 0,
                     count_max: 0,
                     unsupported_async: true,
                 };
-                crate::alloc_count_max::state::send_alloc_measurement(self.name, alloc_info);
+                crate::lib_on::alloc_count_max::state::send_alloc_measurement(self.name, alloc_info);
             } else if #[cfg(feature = "hotpath-alloc-count-total")] {
-                let alloc_info = crate::alloc_count_total::core::AllocationInfo {
+                let alloc_info = crate::lib_on::alloc_count_total::core::AllocationInfo {
                     count_total: 0,
                     unsupported_async: true,
                 };
-                crate::alloc_count_total::state::send_alloc_measurement(self.name, alloc_info);
+                crate::lib_on::alloc_count_total::state::send_alloc_measurement(self.name, alloc_info);
             }
         }
     }

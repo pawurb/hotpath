@@ -22,16 +22,16 @@ unsafe impl GlobalAlloc for CountingAllocator {
         DO_COUNT.with(|do_count| {
             if *do_count.borrow() == 0 {
                 #[cfg(feature = "hotpath-alloc-bytes-total")]
-                crate::alloc_bytes_total::core::track_alloc(layout.size());
+                crate::lib_on::alloc_bytes_total::core::track_alloc(layout.size());
 
                 #[cfg(feature = "hotpath-alloc-bytes-max")]
-                crate::alloc_bytes_max::core::track_alloc(layout.size());
+                crate::lib_on::alloc_bytes_max::core::track_alloc(layout.size());
 
                 #[cfg(feature = "hotpath-alloc-count-total")]
-                crate::alloc_count_total::core::track_alloc();
+                crate::lib_on::alloc_count_total::core::track_alloc();
 
                 #[cfg(feature = "hotpath-alloc-count-max")]
-                crate::alloc_count_max::core::track_alloc();
+                crate::lib_on::alloc_count_max::core::track_alloc();
             }
         });
 
@@ -43,10 +43,10 @@ unsafe impl GlobalAlloc for CountingAllocator {
             if *do_count.borrow() == 0 {
                 // Dispatch to enabled allocation tracking features
                 #[cfg(feature = "hotpath-alloc-bytes-max")]
-                crate::alloc_bytes_max::core::track_dealloc(layout.size());
+                crate::lib_on::alloc_bytes_max::core::track_dealloc(layout.size());
 
                 #[cfg(feature = "hotpath-alloc-count-max")]
-                crate::alloc_count_max::core::track_dealloc();
+                crate::lib_on::alloc_count_max::core::track_dealloc();
             }
         });
 

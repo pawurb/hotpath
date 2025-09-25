@@ -19,6 +19,6 @@ impl Drop for TimeGuard {
     #[inline]
     fn drop(&mut self) {
         let dur = self.start.elapsed();
-        crate::send_duration_measurement(self.name, dur);
+        super::state::send_duration_measurement(self.name, dur);
     }
 }

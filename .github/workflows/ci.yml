@@ -26,6 +26,9 @@ jobs:
       - name: Check no features
         run: | 
           cargo check 
+      - name: Check all features
+        run: | 
+          cargo check --all-features
       - name: Check hotpath feature (time mode)
         run: | 
           cargo check --features hotpath

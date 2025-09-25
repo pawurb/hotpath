@@ -104,13 +104,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
-#[cfg(not(feature = "hotpath"))]
-#[proc_macro_attribute]
-pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
-}
-
-#[cfg(feature = "hotpath")]
 #[proc_macro_attribute]
 pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
@@ -118,63 +111,64 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let sig = &input.sig;
     let block = &input.block;
 
-    {
-        let name = sig.ident.to_string();
-        let asyncness = sig.asyncness.is_some();
+    let name = sig.ident.to_string();
+    let asyncness = sig.asyncness.is_some();
 
-        let output = if asyncness {
-            quote! {
-                #vis #sig {
-                    async {
-                        hotpath::cfg_if! {
-                            if #[cfg(any(
-                                feature = "hotpath-alloc-bytes-total",
-                                feature = "hotpath-alloc-bytes-max",
-                                feature = "hotpath-alloc-count-total",
-                                feature = "hotpath-alloc-count-max"
-                            ))] {
-                                use hotpath::{Handle, RuntimeFlavor};
-                                let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
-
-                                let _guard = match runtime_flavor {
-                                    Some(RuntimeFlavor::CurrentThread) => {
-                                        hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name)))
-                                    }
-                                    _ => {
-                                        hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name)))
-                                    }
-                                };
-
-                            } else {
-                                let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
-                            }
-                        }
-
-                        #block
-                    }.await
-                }
-            }
-        } else {
-            quote! {
-                #vis #sig {
+    let output = if asyncness {
+        quote! {
+            #vis #sig {
+                async {
                     hotpath::cfg_if! {
-                        if #[cfg(any(
+                        if #[cfg(feature = "hotpath-off")] {
+                            // No-op when hotpath-off is enabled
+                        } else if #[cfg(any(
                             feature = "hotpath-alloc-bytes-total",
                             feature = "hotpath-alloc-bytes-max",
                             feature = "hotpath-alloc-count-total",
                             feature = "hotpath-alloc-count-max"
                         ))] {
-                            let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                            use hotpath::{Handle, RuntimeFlavor};
+                            let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
+
+                            let _guard = match runtime_flavor {
+                                Some(RuntimeFlavor::CurrentThread) => {
+                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name)))
+                                }
+                                _ => {
+                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name)))
+                                }
+                            };
                         } else {
                             let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
                         }
                     }
 
                     #block
-                }
+                }.await
             }
-        };
+        }
+    } else {
+        quote! {
+            #vis #sig {
+                hotpath::cfg_if! {
+                    if #[cfg(feature = "hotpath-off")] {
+                        // No-op when hotpath-off is enabled
+                    } else if #[cfg(any(
+                        feature = "hotpath-alloc-bytes-total",
+                        feature = "hotpath-alloc-bytes-max",
+                        feature = "hotpath-alloc-count-total",
+                        feature = "hotpath-alloc-count-max"
+                    ))] {
+                        let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                    } else {
+                        let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                    }
+                }
 
-        output.into()
-    }
+                #block
+            }
+        }
+    };
+
+    output.into()
 }

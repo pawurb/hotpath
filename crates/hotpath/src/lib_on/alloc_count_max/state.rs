@@ -1,4 +1,4 @@
-use crate::alloc_count_max::core::AllocationInfo;
+use super::core::AllocationInfo;
 use crossbeam_channel::{Receiver, Sender};
 use hdrhistogram::Histogram;
 use std::collections::HashMap;
@@ -90,7 +90,7 @@ pub struct HotPathState {
     pub start_time: Instant,
     pub caller_name: String,
     pub percentiles: Vec<u8>,
-    pub format: crate::Format,
+    pub format: crate::lib_on::Format,
 }
 
 pub(crate) fn process_measurement(
@@ -108,7 +108,7 @@ pub(crate) fn process_measurement(
     }
 }
 
-use crate::HOTPATH_STATE;
+use crate::lib_on::HOTPATH_STATE;
 
 pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {

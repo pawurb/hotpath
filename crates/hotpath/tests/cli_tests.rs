@@ -37,7 +37,7 @@ pub mod tests {
                 "Process did not exit successfully: {output:?}",
             );
 
-            let expected = [
+            let all_expected = [
                 "custom_block",
                 "basic::sync_function",
                 "basic::async_function",
@@ -47,7 +47,7 @@ pub mod tests {
             ];
 
             let stdout = String::from_utf8_lossy(&output.stdout);
-            for expected in expected {
+            for expected in all_expected {
                 assert!(
                     stdout.contains(expected),
                     "Expected:\n{expected}\n\nGot:\n{stdout}",
@@ -90,14 +90,14 @@ pub mod tests {
                 "Process did not exit successfully: {output:?}",
             );
 
-            let expected = [
+            let all_expected = [
                 "early_returns::early_return",
                 "early_returns::propagates_error",
                 "early_returns::normal_path",
             ];
 
             let stdout = String::from_utf8_lossy(&output.stdout);
-            for expected in expected {
+            for expected in all_expected {
                 assert!(
                     stdout.contains(expected),
                     "Expected:\n{expected}\n\nGot:\n{stdout}",
@@ -122,9 +122,9 @@ pub mod tests {
             .expect("Failed to execute command");
         let stdout = String::from_utf8_lossy(&output.stdout);
 
-        let expected = ["N/A*", "only available for tokio current_thread"];
+        let all_expected = ["N/A*", "only available for tokio current_thread"];
 
-        for expected in expected {
+        for expected in all_expected {
             assert!(
                 stdout.contains(expected),
                 "Expected:\n{expected}\n\nGot:\n{stdout}",
@@ -178,12 +178,21 @@ pub mod tests {
             "Process did not exit successfully: {output:?}",
         );
 
+        let all_expected = [
+            "main_percentiles::example_function",
+            "P50",
+            "P90",
+            "P99",
+            "Function",
+        ];
+
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("main_percentiles::example_function"));
-        assert!(stdout.contains("P50"));
-        assert!(stdout.contains("P90"));
-        assert!(stdout.contains("P99"));
-        assert!(stdout.contains("Function"));
+        for expected in all_expected {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
     }
 
     #[test]
@@ -206,10 +215,19 @@ pub mod tests {
             "Process did not exit successfully: {output:?}",
         );
 
+        let all_expected = [
+            "main_format::example_function",
+            "\"hotpath_profiling_mode\"",
+            "\"calls\"",
+        ];
+
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("main_format::example_function"));
-        assert!(stdout.contains("\"hotpath_profiling_mode\""));
-        assert!(stdout.contains("\"calls\""));
+        for expected in all_expected {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
     }
 
     #[test]
@@ -232,11 +250,20 @@ pub mod tests {
             "Process did not exit successfully: {output:?}",
         );
 
+        let all_expected = [
+            "main_percentiles_format::example_function",
+            "\"hotpath_profiling_mode\"",
+            "\"p75\"",
+            "\"p95\"",
+        ];
+
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("main_percentiles_format::example_function"));
-        assert!(stdout.contains("\"hotpath_profiling_mode\""));
-        assert!(stdout.contains("\"p75\""));
-        assert!(stdout.contains("\"p95\"")); // Custom percentile in JSON
+        for expected in all_expected {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
     }
 
     #[test]
@@ -262,10 +289,10 @@ pub mod tests {
             "Process did not exit successfully: {output:?}",
         );
 
-        let expected = ["unit_test::async_function", "unit_test::sync_function"];
+        let all_expected = ["unit_test::async_function", "unit_test::sync_function"];
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        for expected in expected {
+        for expected in all_expected {
             assert!(
                 stdout.contains(expected),
                 "Expected:\n{expected}\n\nGot:\n{stdout}",
@@ -295,10 +322,41 @@ pub mod tests {
             "Process did not exit successfully: {output:?}",
         );
 
-        let expected = ["N/A*", "only available for tokio current_thread"];
+        let all_expected = ["N/A*", "only available for tokio current_thread"];
 
         let stdout = String::from_utf8_lossy(&output.stdout);
-        for expected in expected {
+        for expected in all_expected {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_all_features_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-all-features",
+                "--example",
+                "basic",
+                "--all-features",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let all_expected = ["i ran"];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        for expected in all_expected {
             assert!(
                 stdout.contains(expected),
                 "Expected:\n{expected}\n\nGot:\n{stdout}",

@@ -1,4 +1,15 @@
-use crate::{FunctionStats, StatsTable};
+cfg_if::cfg_if! {
+    if #[cfg(any(
+        feature = "hotpath-alloc-bytes-total",
+        feature = "hotpath-alloc-bytes-max",
+        feature = "hotpath-alloc-count-total",
+        feature = "hotpath-alloc-count-max"
+    ))] {
+        use super::{FunctionStats, StatsTable};
+    } else {
+        use super::{FunctionStats, StatsTable};
+    }
+}
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
@@ -209,7 +220,7 @@ pub fn display_performance_summary(
     total_elapsed: Duration,
     caller_name: &str,
     percentiles: &[u8],
-    format: crate::Format,
+    format: super::Format,
 ) {
     let has_data = stats.values().any(|s| s.has_data);
 
@@ -219,18 +230,18 @@ pub fn display_performance_summary(
     }
 
     match format {
-        crate::Format::Table => {
+        super::Format::Table => {
             display_table(
                 StatsTable::new(stats, total_elapsed, percentiles.to_vec()),
                 caller_name,
             );
         }
-        crate::Format::Json => {
+        super::Format::Json => {
             let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
                 .to_serializable_table(caller_name);
             println!("{}", serde_json::to_string(&json).unwrap());
         }
-        crate::Format::JsonPretty => {
+        super::Format::JsonPretty => {
             let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
                 .to_serializable_table(caller_name);
             println!("{}", serde_json::to_string_pretty(&json).unwrap());

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use super::super::output::Tableable;
 use super::state::FunctionStats;
-use crate::output::Tableable;
 use colored::*;
 
 pub struct StatsTable<'a> {

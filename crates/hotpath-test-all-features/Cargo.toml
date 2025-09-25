@@ -1,0 +1,18 @@
+[package]
+name = "hotpath-test-all-features"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[features]
+default = []
+hotpath = ["hotpath/hotpath"]
+hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
+hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
+hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-count-max = ["hotpath/hotpath-alloc-count-max"]
+hotpath-off = ["hotpath/hotpath-off"]
+
+[dependencies]
+hotpath = { path = "../hotpath" }
+tokio = { version = "1.47", features = ["full"] }

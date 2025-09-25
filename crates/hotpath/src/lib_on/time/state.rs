@@ -92,7 +92,7 @@ pub(crate) fn process_measurement(
     }
 }
 
-use crate::HOTPATH_STATE;
+use super::super::HOTPATH_STATE;
 
 pub fn send_duration_measurement(name: &'static str, duration: Duration) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {
