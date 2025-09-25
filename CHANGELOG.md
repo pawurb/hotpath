@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.10] - 2025-09-25
+
+### 🐛 Bug Fixes
+
+- Support --all-features config [#16]
+
+### ⚙️ Miscellaneous Tasks
+
+- Add test crates, improve alloc testing
+- Release v0.2.10
+
 ## [0.2.9] - 2025-09-18
 
 ### 🐛 Bug Fixes
