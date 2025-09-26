@@ -1,15 +1,4 @@
-cfg_if::cfg_if! {
-    if #[cfg(any(
-        feature = "hotpath-alloc-bytes-total",
-        feature = "hotpath-alloc-bytes-max",
-        feature = "hotpath-alloc-count-total",
-        feature = "hotpath-alloc-count-max"
-    ))] {
-        use super::{FunctionStats, StatsTable};
-    } else {
-        use super::{FunctionStats, StatsTable};
-    }
-}
+use super::{FunctionStats, StatsTable};
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
