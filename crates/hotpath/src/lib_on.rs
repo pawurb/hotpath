@@ -219,7 +219,6 @@ pub struct HotPath {
 
 use std::time::Duration;
 
-use super::output::MetricsProvider;
 
 pub trait MetricsBuilder<'a> {
     fn new(
@@ -275,7 +274,7 @@ impl Drop for HotPath {
             if let Ok(stats) = rx.recv() {
                 if let Ok(state_guard) = state.read() {
                     let total_elapsed = end_time.duration_since(state_guard.start_time);
-                    let metrics_provider =
+                    let _metrics_provider =
                         StatsData::new(&stats, total_elapsed, state_guard.percentiles.clone());
 
                     self.reporter.report(

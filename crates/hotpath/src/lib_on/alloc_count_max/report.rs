@@ -8,7 +8,7 @@ use super::state::FunctionStats;
 pub struct StatsData<'a> {
     pub stats: &'a HashMap<&'static str, FunctionStats>,
     pub total_elapsed: Duration,
-    percentiles: Vec<u8>,
+    pub percentiles: Vec<u8>,
 }
 
 impl<'a> MetricsProvider<'a> for StatsData<'a> {
