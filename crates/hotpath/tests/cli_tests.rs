@@ -455,4 +455,26 @@ pub mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_no_op_block_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "no_op_block",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(stdout.contains("custom_block output"));
+    }
 }

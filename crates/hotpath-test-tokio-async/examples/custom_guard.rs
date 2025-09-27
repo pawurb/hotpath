@@ -36,6 +36,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..50 {
         sync_function(i);
         async_function(i * 2).await;
+
+        #[cfg(feature = "hotpath")]
         hotpath::measure_block!("custom_block", {
             if i == 0 {
                 println!("custom_block output");
@@ -51,6 +53,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for i in 0..50 {
         sync_function(i);
         async_function(i * 2).await;
+
+        #[cfg(feature = "hotpath")]
         hotpath::measure_block!("custom_block", {
             if i == 0 {
                 println!("custom_block output");
