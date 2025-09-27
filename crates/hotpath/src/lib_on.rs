@@ -1,6 +1,6 @@
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
-pub use output::Reporter;
+pub use output::{Reporter, MetricsProvider, MetricType};
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -27,7 +27,7 @@ cfg_if::cfg_if! {
         pub use time::guard::TimeGuard;
         pub use time::state::FunctionStats;
         use time::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     }
@@ -39,7 +39,7 @@ cfg_if::cfg_if! {
         pub use alloc_bytes_max::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_bytes_max::state::FunctionStats;
         use alloc_bytes_max::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
@@ -47,7 +47,7 @@ cfg_if::cfg_if! {
         pub use alloc_bytes_total::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_bytes_total::state::FunctionStats;
         use alloc_bytes_total::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-max")] {
@@ -55,7 +55,7 @@ cfg_if::cfg_if! {
         pub use alloc_count_max::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_count_max::state::FunctionStats;
         use alloc_count_max::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-total")] {
@@ -63,7 +63,7 @@ cfg_if::cfg_if! {
         pub use alloc_count_total::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_count_total::state::FunctionStats;
         use alloc_count_total::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     }
@@ -249,12 +249,10 @@ impl Drop for HotPath {
             if let Ok(stats) = rx.recv() {
                 if let Ok(state_guard) = state.read() {
                     let total_elapsed = end_time.duration_since(state_guard.start_time);
-                    self.reporter.report(
-                        &stats,
-                        total_elapsed,
-                        &state_guard.caller_name,
-                        &state_guard.percentiles,
-                    );
+                    let metrics_provider =
+                        StatsData::new(&stats, total_elapsed, state_guard.percentiles.clone());
+
+                    self.reporter.report(&metrics_provider, &state_guard.caller_name);
                 }
             }
         }
