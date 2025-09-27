@@ -6,7 +6,107 @@ use serde::{
     Serialize,
 };
 use std::collections::HashMap;
+use std::fmt;
 use std::time::Duration;
+
+#[derive(Debug, Clone)]
+pub enum MetricType {
+    CallsCount(u64), // Number of function calls
+    Timing(u64),     // Duration in nanoseconds
+    AllocBytes(u64), // Bytes allocated
+    AllocCount(u64), // Allocation count
+    Percentage(u64), // Percentage as basis points (1% = 100)
+    Unsupported,     // For N/A values (async functions when not supported)
+}
+
+impl fmt::Display for MetricType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MetricType::CallsCount(count) => {
+                write!(f, "{}", count)
+            }
+            MetricType::Timing(ns) => {
+                let duration = Duration::from_nanos(*ns);
+                write!(f, "{:.2?}", duration)
+            }
+            MetricType::AllocBytes(bytes) => {
+                write!(f, "{}", format_bytes(*bytes))
+            }
+            MetricType::AllocCount(count) => {
+                write!(f, "{}", count)
+            }
+            MetricType::Percentage(basis_points) => {
+                write!(f, "{:.2}%", *basis_points as f64 / 100.0)
+            }
+            MetricType::Unsupported => {
+                write!(f, "N/A*")
+            }
+        }
+    }
+}
+
+impl Serialize for MetricType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            MetricType::CallsCount(count) => serializer.serialize_u64(*count),
+            MetricType::Timing(ns) => serializer.serialize_u64(*ns),
+            MetricType::AllocBytes(bytes) => serializer.serialize_u64(*bytes),
+            MetricType::AllocCount(count) => serializer.serialize_u64(*count),
+            MetricType::Percentage(basis_points) => serializer.serialize_u64(*basis_points),
+            MetricType::Unsupported => serializer.serialize_none(),
+        }
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    const THRESHOLD: f64 = 1024.0;
+
+    if bytes == 0 {
+        return "0 B".to_string();
+    }
+
+    let bytes_f = bytes as f64;
+    let unit_index = (bytes_f.log(THRESHOLD).floor() as usize).min(UNITS.len() - 1);
+    let unit_value = bytes_f / THRESHOLD.powi(unit_index as i32);
+
+    if unit_index == 0 {
+        format!("{} {}", bytes, UNITS[unit_index])
+    } else {
+        format!("{:.1} {}", unit_value, UNITS[unit_index])
+    }
+}
+
+// Helper function to format function names consistently
+pub fn format_function_name(function_name: &str) -> String {
+    let parts: Vec<&str> = function_name.split("::").collect();
+    if parts.len() > 2 {
+        parts[parts.len() - 2..].join("::")
+    } else {
+        function_name.to_string()
+    }
+}
+
+// Helper function to get sorted entries from metric data
+pub(crate) fn get_sorted_entries<'a, T: Tableable<'a>>(
+    tableable: &T,
+) -> Vec<(String, Vec<MetricType>)> {
+    let metric_data = tableable.metric_data();
+
+    let mut sorted_entries: Vec<(String, Vec<MetricType>)> = metric_data.into_iter().collect();
+    sorted_entries.sort_by(|(name_a, metrics_a), (name_b, metrics_b)| {
+        let key_a = tableable.sort_key(name_a, metrics_a);
+        let key_b = tableable.sort_key(name_b, metrics_b);
+        key_b
+            .partial_cmp(&key_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    sorted_entries
+}
 
 pub trait Reporter {
     fn report(
@@ -37,7 +137,8 @@ pub struct SerializableOutput {
 
 pub struct SerializableTable {
     pub headers: Vec<String>,
-    pub rows: Vec<Vec<String>>,
+    pub function_names: Vec<String>,
+    pub rows: Vec<Vec<MetricType>>,
 }
 
 impl Serialize for SerializableTable {
@@ -47,9 +148,9 @@ impl Serialize for SerializableTable {
     {
         let mut map = serializer.serialize_map(Some(self.rows.len()))?;
 
-        for row in &self.rows {
-            if !row.is_empty() {
-                let function_name = &row[0];
+        for (i, row) in self.rows.iter().enumerate() {
+            if i < self.function_names.len() {
+                let function_name = &self.function_names[i];
 
                 // Create ordered function data using a nested map serializer
                 let function_serializer = FunctionDataSerializer {
@@ -67,7 +168,7 @@ impl Serialize for SerializableTable {
 
 struct FunctionDataSerializer<'a> {
     headers: &'a [String],
-    row: &'a [String],
+    row: &'a [MetricType],
 }
 
 impl<'a> Serialize for FunctionDataSerializer<'a> {
@@ -79,12 +180,12 @@ impl<'a> Serialize for FunctionDataSerializer<'a> {
 
         // Skip the first header (Function) and iterate in order
         for (i, header) in self.headers.iter().enumerate().skip(1) {
-            if i < self.row.len() {
+            if i - 1 < self.row.len() {
                 let key = header
                     .to_lowercase()
                     .replace(' ', "_")
                     .replace('%', "percent");
-                map.serialize_entry(&key, &self.row[i])?;
+                map.serialize_entry(&key, &self.row[i - 1])?;
             }
         }
 
@@ -99,11 +200,17 @@ where
     fn from((tableable, _caller_name): (&T, &str)) -> Self {
         let hotpath_profiling_mode = Self::determine_profiling_mode(&tableable.headers());
 
+        // Use new interface: get sorted entries and separate into names and rows
+        let sorted_entries = get_sorted_entries(tableable);
+        let (function_names, rows): (Vec<String>, Vec<Vec<MetricType>>) =
+            sorted_entries.into_iter().unzip();
+
         Self {
             hotpath_profiling_mode,
             output: SerializableTable {
                 headers: tableable.headers(),
-                rows: tableable.rows(),
+                function_names,
+                rows,
             },
         }
     }
@@ -159,11 +266,20 @@ pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &st
 
     table.add_row(Row::new(header_cells));
 
-    for row_data in tableable.rows() {
-        let row_cells: Vec<Cell> = row_data
-            .into_iter()
-            .map(|cell_data| Cell::new(&cell_data))
-            .collect();
+    // Use new interface: get sorted entries and separate into names and rows
+    let sorted_entries = get_sorted_entries(&tableable);
+
+    for (function_name, metrics) in sorted_entries {
+        let mut row_cells = Vec::new();
+
+        // Add function name as first cell
+        row_cells.push(Cell::new(&function_name));
+
+        // Add metric data cells, using Display implementation
+        for metric in &metrics {
+            row_cells.push(Cell::new(&metric.to_string()));
+        }
+
         table.add_row(Row::new(row_cells));
     }
 
@@ -203,7 +319,18 @@ pub(crate) trait Tableable<'a> {
         headers
     }
     fn percentiles(&self) -> Vec<u8>;
-    fn rows(&self) -> Vec<Vec<String>>;
+
+    fn metric_data(&self) -> HashMap<String, Vec<MetricType>>;
+
+    fn sort_key(&self, _function_name: &str, metrics: &[MetricType]) -> f64 {
+        // Sort by percentage, higher percentages first
+        if let Some(MetricType::Percentage(basis_points)) = metrics.last() {
+            *basis_points as f64 / 100.0
+        } else {
+            0.0
+        }
+    }
+
     fn has_unsupported_async(&self) -> bool {
         false // Default implementation for time-based measurements
     }
