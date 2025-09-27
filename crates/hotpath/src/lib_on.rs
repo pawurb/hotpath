@@ -27,7 +27,7 @@ cfg_if::cfg_if! {
         pub use time::guard::TimeGuard;
         pub use time::state::FunctionStats;
         use time::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     }
@@ -39,7 +39,7 @@ cfg_if::cfg_if! {
         pub use alloc_bytes_max::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_bytes_max::state::FunctionStats;
         use alloc_bytes_max::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
@@ -47,7 +47,7 @@ cfg_if::cfg_if! {
         pub use alloc_bytes_total::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_bytes_total::state::FunctionStats;
         use alloc_bytes_total::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-max")] {
@@ -55,7 +55,7 @@ cfg_if::cfg_if! {
         pub use alloc_count_max::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_count_max::state::FunctionStats;
         use alloc_count_max::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     } else if #[cfg(feature = "hotpath-alloc-count-total")] {
@@ -63,7 +63,7 @@ cfg_if::cfg_if! {
         pub use alloc_count_total::{core::AllocationInfo, guard::AllocGuard};
         pub use alloc_count_total::state::FunctionStats;
         use alloc_count_total::{
-            report::StatsTable,
+            report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     }
@@ -217,6 +217,32 @@ pub struct HotPath {
     reporter: Box<dyn Reporter>,
 }
 
+use std::time::Duration;
+
+use super::output::MetricsProvider;
+
+pub trait MetricsBuilder<'a> {
+    fn new(
+        stats: &'a HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        percentiles: Vec<u8>,
+    ) -> Self;
+}
+
+impl<'a> MetricsBuilder<'a> for StatsData<'a> {
+    fn new(
+        stats: &'a HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        percentiles: Vec<u8>,
+    ) -> Self {
+        Self {
+            stats,
+            total_elapsed,
+            percentiles,
+        }
+    }
+}
+
 impl HotPath {
     pub fn set_reporter(&mut self, reporter: Box<dyn Reporter>) {
         self.reporter = reporter;
@@ -249,6 +275,9 @@ impl Drop for HotPath {
             if let Ok(stats) = rx.recv() {
                 if let Ok(state_guard) = state.read() {
                     let total_elapsed = end_time.duration_since(state_guard.start_time);
+                    let metrics_provider =
+                        StatsData::new(&stats, total_elapsed, state_guard.percentiles.clone());
+
                     self.reporter.report(
                         &stats,
                         total_elapsed,

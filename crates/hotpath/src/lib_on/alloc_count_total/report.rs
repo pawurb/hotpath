@@ -2,28 +2,16 @@ use colored::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use super::super::output::{format_function_name, MetricType, Tableable};
+use super::super::output::{format_function_name, MetricType, MetricsProvider};
 use super::state::FunctionStats;
 
-pub struct StatsTable<'a> {
-    stats: &'a HashMap<&'static str, FunctionStats>,
-    total_elapsed: Duration,
-    percentiles: Vec<u8>,
+pub struct StatsData<'a> {
+    pub stats: &'a HashMap<&'static str, FunctionStats>,
+    pub total_elapsed: Duration,
+    pub percentiles: Vec<u8>,
 }
 
-impl<'a> Tableable<'a> for StatsTable<'a> {
-    fn new(
-        stats: &'a HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        percentiles: Vec<u8>,
-    ) -> Self {
-        Self {
-            stats,
-            total_elapsed,
-            percentiles,
-        }
-    }
-
+impl<'a> MetricsProvider<'a> for StatsData<'a> {
     fn percentiles(&self) -> Vec<u8> {
         self.percentiles.clone()
     }

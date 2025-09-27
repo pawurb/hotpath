@@ -1,4 +1,5 @@
-use super::{FunctionStats, StatsTable};
+use super::{FunctionStats, StatsData};
+use crate::lib_on::MetricsBuilder;
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
@@ -91,7 +92,7 @@ pub fn format_function_name(function_name: &str) -> String {
 }
 
 // Helper function to get sorted entries from metric data
-pub(crate) fn get_sorted_entries<'a, T: Tableable<'a>>(
+pub(crate) fn get_sorted_entries<'a, T: MetricsProvider<'a>>(
     tableable: &T,
 ) -> Vec<(String, Vec<MetricType>)> {
     let metric_data = tableable.metric_data();
@@ -195,7 +196,7 @@ impl<'a> Serialize for FunctionDataSerializer<'a> {
 
 impl<'a, T> From<(&T, &str)> for SerializableOutput
 where
-    T: Tableable<'a>,
+    T: MetricsProvider<'a>,
 {
     fn from((tableable, _caller_name): (&T, &str)) -> Self {
         let hotpath_profiling_mode = Self::determine_profiling_mode(&tableable.headers());
@@ -234,7 +235,7 @@ impl SerializableOutput {
     }
 }
 
-pub(crate) trait TableableSerialize<'a>: Tableable<'a> {
+pub(crate) trait MetricsProviderSerialize<'a>: MetricsProvider<'a> {
     fn to_serializable_table(&self, caller_name: &str) -> SerializableOutput
     where
         Self: Sized,
@@ -243,9 +244,9 @@ pub(crate) trait TableableSerialize<'a>: Tableable<'a> {
     }
 }
 
-impl<'a, T> TableableSerialize<'a> for T where T: Tableable<'a> {}
+impl<'a, T> MetricsProviderSerialize<'a> for T where T: MetricsProvider<'a> {}
 
-pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &str) {
+pub(crate) fn display_table<'a, T: MetricsProvider<'a>>(tableable: T, caller_name: &str) {
     let use_colors = std::env::var("NO_COLOR").is_err();
 
     let mut table = Table::new();
@@ -300,7 +301,7 @@ pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &st
     }
 }
 
-pub(crate) trait Tableable<'a> {
+pub(crate) trait MetricsProvider<'a> {
     fn description(&self, caller_name: &str) -> String;
     fn headers(&self) -> Vec<String> {
         let mut headers = vec![
@@ -334,11 +335,6 @@ pub(crate) trait Tableable<'a> {
     fn has_unsupported_async(&self) -> bool {
         false // Default implementation for time-based measurements
     }
-    fn new(
-        stats: &'a HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        percentiles: Vec<u8>,
-    ) -> Self;
 }
 
 pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
@@ -391,7 +387,7 @@ impl Reporter for TableReporter {
         }
 
         display_table(
-            StatsTable::new(stats, total_elapsed, percentiles.to_vec()),
+            StatsData::new(stats, total_elapsed, percentiles.to_vec()),
             caller_name,
         );
     }
@@ -412,7 +408,7 @@ impl Reporter for JsonReporter {
             return;
         }
 
-        let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
+        let json = StatsData::new(stats, total_elapsed, percentiles.to_vec())
             .to_serializable_table(caller_name);
         println!("{}", serde_json::to_string(&json).unwrap());
     }
@@ -433,7 +429,7 @@ impl Reporter for JsonPrettyReporter {
             return;
         }
 
-        let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
+        let json = StatsData::new(stats, total_elapsed, percentiles.to_vec())
             .to_serializable_table(caller_name);
         println!("{}", serde_json::to_string_pretty(&json).unwrap());
     }
