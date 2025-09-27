@@ -24,7 +24,7 @@ async fn async_function(sleep: u64) {
     tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
-use hotpath::Reporter;
+use hotpath::{Reporter, MetricType};
 use tracing::info;
 
 struct TracingReporter;
@@ -39,7 +39,12 @@ impl Reporter for TracingReporter {
         info!("Statistics:");
 
         for (function_name, metrics) in metric_data {
-            info!("  {}: metrics={:?}", function_name, metrics);
+            // Extract calls count from the first metric (always CallsCount)
+            if let Some(first_metric) = metrics.first() {
+                if let MetricType::CallsCount(calls) = first_metric {
+                    info!("{}: {} calls", function_name, calls);
+                }
+            }
         }
     }
 }

@@ -1,6 +1,6 @@
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
-pub use output::{Reporter, MetricsProvider};
+pub use output::{Reporter, MetricsProvider, MetricType};
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -215,31 +215,6 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
 pub struct HotPath {
     state: Arc<RwLock<HotPathState>>,
     reporter: Box<dyn Reporter>,
-}
-
-use std::time::Duration;
-
-
-pub trait MetricsBuilder<'a> {
-    fn new(
-        stats: &'a HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        percentiles: Vec<u8>,
-    ) -> Self;
-}
-
-impl<'a> MetricsBuilder<'a> for StatsData<'a> {
-    fn new(
-        stats: &'a HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        percentiles: Vec<u8>,
-    ) -> Self {
-        Self {
-            stats,
-            total_elapsed,
-            percentiles,
-        }
-    }
 }
 
 impl HotPath {

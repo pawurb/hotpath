@@ -1,13 +1,13 @@
 use super::FunctionStats;
 use colored::*;
+use std::collections::HashMap;
+use std::time::Duration;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
     ser::{SerializeMap, Serializer},
     Serialize,
 };
-use std::collections::HashMap;
 use std::fmt;
-use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub enum MetricType {
@@ -423,6 +423,14 @@ pub trait MetricsProvider<'a> {
     fn has_unsupported_async(&self) -> bool {
         false // Default implementation for time-based measurements
     }
+
+    fn new(
+        stats: &'a HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        percentiles: Vec<u8>,
+    ) -> Self
+    where
+        Self: Sized;
 }
 
 pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {

@@ -12,6 +12,18 @@ pub struct StatsData<'a> {
 }
 
 impl<'a> MetricsProvider<'a> for StatsData<'a> {
+    fn new(
+        stats: &'a HashMap<&'static str, FunctionStats>,
+        total_elapsed: Duration,
+        percentiles: Vec<u8>,
+    ) -> Self {
+        Self {
+            stats,
+            total_elapsed,
+            percentiles,
+        }
+    }
+
     fn description(&self, caller_name: &str) -> String {
         format!(
             "\n{} Max count allocation statistics from {} (Total time: {:.2?}):",

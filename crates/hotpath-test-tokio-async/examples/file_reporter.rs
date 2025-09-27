@@ -24,7 +24,7 @@ async fn async_function(sleep: u64) {
     tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
-use hotpath::Reporter;
+use hotpath::{Reporter, MetricType};
 
 struct FileReporter;
 
@@ -39,7 +39,12 @@ impl Reporter for FileReporter {
         output.push_str("Statistics:\n");
 
         for (function_name, metrics) in metric_data {
-            output.push_str(&format!("  {}: metrics={:?}\n", function_name, metrics));
+            // Extract calls count from the first metric (always CallsCount)
+            if let Some(first_metric) = metrics.first() {
+                if let MetricType::CallsCount(calls) = first_metric {
+                    output.push_str(&format!("{}: {} calls\n", function_name, calls));
+                }
+            }
         }
 
         std::fs::write("hotpath_report.txt", output).unwrap();
