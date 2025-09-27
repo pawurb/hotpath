@@ -64,9 +64,13 @@ name = "unsupported_async"
 path = "examples/unsupported_async.rs"
 
 [[example]]
-name = "file_reporter"
-path = "examples/file_reporter.rs"
+name = "csv_file_reporter"
+path = "examples/csv_file_reporter.rs"
 
 [[example]]
 name = "tracing_reporter"
 path = "examples/tracing_reporter.rs"
+
+[[example]]
+name = "json_file_reporter"
+path = "examples/json_file_reporter.rs"

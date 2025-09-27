@@ -25,39 +25,46 @@ async fn async_function(sleep: u64) {
 }
 
 use hotpath::Reporter;
-use tracing::{info, info_span};
 
-struct TracingReporter;
+struct FileReporter;
 
-impl Reporter for TracingReporter {
+impl Reporter for FileReporter {
     fn report(&self, metrics_provider: &dyn hotpath::MetricsProvider<'_>) {
-        info!("HotPath Report for: {}", metrics_provider.caller_name());
-        info!("Headers: {}", metrics_provider.headers().join(", "));
+        let mut output = String::new();
+        output.push_str(&format!(
+            "HotPath Report for: {}\n",
+            metrics_provider.caller_name()
+        ));
+        output.push_str(&format!(
+            "Description: {}\n",
+            metrics_provider.description()
+        ));
 
         let metric_data = metrics_provider.metric_data();
-        for (function_name, metrics) in metric_data {
-            let func_span = info_span!("metrics", function = %function_name);
-            let _f_enter = func_span.enter();
+        output.push_str(&format!("Functions measured: {}\n", metric_data.len()));
+        output.push_str(&metrics_provider.headers().join(", "));
+        output.push('\n');
 
-            info!(
-                "{}, {}",
+        for (function_name, metrics) in metric_data {
+            output.push_str(&format!(
+                "{}, {}\n",
                 function_name,
                 metrics
                     .into_iter()
                     .map(|m| m.to_string())
                     .collect::<Vec<String>>()
                     .join(", ")
-            );
+            ));
         }
+
+        std::fs::write("hotpath_report.csv", output).unwrap();
     }
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-
     let mut hotpath = hotpath::init("main".to_string(), &[50, 90, 95], hotpath::Format::Table);
-    hotpath.set_reporter(Box::new(TracingReporter));
+    hotpath.set_reporter(Box::new(FileReporter));
 
     for i in 0..100 {
         sync_function(i);

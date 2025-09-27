@@ -1,4 +1,4 @@
-use super::{FunctionStats, StatsTable};
+use super::FunctionStats;
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
@@ -6,16 +6,91 @@ use serde::{
     Serialize,
 };
 use std::collections::HashMap;
+use std::fmt;
 use std::time::Duration;
 
+#[derive(Debug, Clone)]
+pub enum MetricType {
+    CallsCount(u64), // Number of function calls
+    Timing(u64),     // Duration in nanoseconds
+    AllocBytes(u64), // Bytes allocated
+    AllocCount(u64), // Allocation count
+    Percentage(u64), // Percentage as basis points (1% = 100)
+    Unsupported,     // For N/A values (async functions when not supported)
+}
+
+impl fmt::Display for MetricType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MetricType::CallsCount(count) => {
+                write!(f, "{}", count)
+            }
+            MetricType::Timing(ns) => {
+                let duration = Duration::from_nanos(*ns);
+                write!(f, "{:.2?}", duration)
+            }
+            MetricType::AllocBytes(bytes) => {
+                write!(f, "{}", format_bytes(*bytes))
+            }
+            MetricType::AllocCount(count) => {
+                write!(f, "{}", count)
+            }
+            MetricType::Percentage(basis_points) => {
+                write!(f, "{:.2}%", *basis_points as f64 / 100.0)
+            }
+            MetricType::Unsupported => {
+                write!(f, "N/A*")
+            }
+        }
+    }
+}
+
+impl Serialize for MetricType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            MetricType::CallsCount(count) => serializer.serialize_u64(*count),
+            MetricType::Timing(ns) => serializer.serialize_u64(*ns),
+            MetricType::AllocBytes(bytes) => serializer.serialize_u64(*bytes),
+            MetricType::AllocCount(count) => serializer.serialize_u64(*count),
+            MetricType::Percentage(basis_points) => serializer.serialize_u64(*basis_points),
+            MetricType::Unsupported => serializer.serialize_none(),
+        }
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    const THRESHOLD: f64 = 1024.0;
+
+    if bytes == 0 {
+        return "0 B".to_string();
+    }
+
+    let bytes_f = bytes as f64;
+    let unit_index = (bytes_f.log(THRESHOLD).floor() as usize).min(UNITS.len() - 1);
+    let unit_value = bytes_f / THRESHOLD.powi(unit_index as i32);
+
+    if unit_index == 0 {
+        format!("{} {}", bytes, UNITS[unit_index])
+    } else {
+        format!("{:.1} {}", unit_value, UNITS[unit_index])
+    }
+}
+
+pub fn format_function_name(function_name: &str) -> String {
+    let parts: Vec<&str> = function_name.split("::").collect();
+    if parts.len() > 2 {
+        parts[parts.len() - 2..].join("::")
+    } else {
+        function_name.to_string()
+    }
+}
+
 pub trait Reporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    );
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>);
 }
 
 #[allow(dead_code)]
@@ -30,28 +105,30 @@ pub enum ProfilingMode {
 }
 
 #[derive(Serialize)]
-pub struct SerializableOutput {
+pub struct MetricsJson {
     pub hotpath_profiling_mode: ProfilingMode,
-    pub output: SerializableTable,
+    pub total_elapsed: u64,
+    pub caller_name: String,
+    pub output: MetricsDataJson,
 }
 
-pub struct SerializableTable {
+pub struct MetricsDataJson {
     pub headers: Vec<String>,
-    pub rows: Vec<Vec<String>>,
+    pub function_names: Vec<String>,
+    pub rows: Vec<Vec<MetricType>>,
 }
 
-impl Serialize for SerializableTable {
+impl Serialize for MetricsDataJson {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
         let mut map = serializer.serialize_map(Some(self.rows.len()))?;
 
-        for row in &self.rows {
-            if !row.is_empty() {
-                let function_name = &row[0];
+        for (i, row) in self.rows.iter().enumerate() {
+            if i < self.function_names.len() {
+                let function_name = &self.function_names[i];
 
-                // Create ordered function data using a nested map serializer
                 let function_serializer = FunctionDataSerializer {
                     headers: &self.headers,
                     row,
@@ -67,7 +144,7 @@ impl Serialize for SerializableTable {
 
 struct FunctionDataSerializer<'a> {
     headers: &'a [String],
-    row: &'a [String],
+    row: &'a [MetricType],
 }
 
 impl<'a> Serialize for FunctionDataSerializer<'a> {
@@ -79,12 +156,12 @@ impl<'a> Serialize for FunctionDataSerializer<'a> {
 
         // Skip the first header (Function) and iterate in order
         for (i, header) in self.headers.iter().enumerate().skip(1) {
-            if i < self.row.len() {
+            if i - 1 < self.row.len() {
                 let key = header
                     .to_lowercase()
                     .replace(' ', "_")
                     .replace('%', "percent");
-                map.serialize_entry(&key, &self.row[i])?;
+                map.serialize_entry(&key, &self.row[i - 1])?;
             }
         }
 
@@ -92,25 +169,29 @@ impl<'a> Serialize for FunctionDataSerializer<'a> {
     }
 }
 
-impl<'a, T> From<(&T, &str)> for SerializableOutput
-where
-    T: Tableable<'a>,
-{
-    fn from((tableable, _caller_name): (&T, &str)) -> Self {
-        let hotpath_profiling_mode = Self::determine_profiling_mode(&tableable.headers());
+impl From<&dyn MetricsProvider<'_>> for MetricsJson {
+    fn from(metrics: &dyn MetricsProvider<'_>) -> Self {
+        let hotpath_profiling_mode = Self::determine_profiling_mode();
+
+        let sorted_entries = get_sorted_entries(metrics);
+        let (function_names, rows): (Vec<String>, Vec<Vec<MetricType>>) =
+            sorted_entries.into_iter().unzip();
 
         Self {
             hotpath_profiling_mode,
-            output: SerializableTable {
-                headers: tableable.headers(),
-                rows: tableable.rows(),
+            total_elapsed: metrics.total_elapsed(),
+            caller_name: metrics.caller_name().to_string(),
+            output: MetricsDataJson {
+                headers: metrics.headers(),
+                function_names,
+                rows,
             },
         }
     }
 }
 
-impl SerializableOutput {
-    fn determine_profiling_mode(_headers: &[String]) -> ProfilingMode {
+impl MetricsJson {
+    fn determine_profiling_mode() -> ProfilingMode {
         cfg_if::cfg_if! {
             if #[cfg(feature = "hotpath-alloc-bytes-total")] {
                 ProfilingMode::AllocBytesTotal
@@ -125,25 +206,34 @@ impl SerializableOutput {
             }
         }
     }
-}
 
-pub(crate) trait TableableSerialize<'a>: Tableable<'a> {
-    fn to_serializable_table(&self, caller_name: &str) -> SerializableOutput
-    where
-        Self: Sized,
-    {
-        SerializableOutput::from((self, caller_name))
+    /// Save the metrics to a JSON file
+    pub fn save_to_file<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let json_string = serde_json::to_string_pretty(self)?;
+        std::fs::write(path, json_string)?;
+        Ok(())
+    }
+
+    /// Save the metrics to a JSON file with compact formatting
+    pub fn save_to_file_compact<P: AsRef<std::path::Path>>(
+        &self,
+        path: P,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let json_string = serde_json::to_string(self)?;
+        std::fs::write(path, json_string)?;
+        Ok(())
     }
 }
 
-impl<'a, T> TableableSerialize<'a> for T where T: Tableable<'a> {}
-
-pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &str) {
+pub(crate) fn display_table(metrics_provider: &dyn MetricsProvider<'_>) {
     let use_colors = std::env::var("NO_COLOR").is_err();
 
     let mut table = Table::new();
 
-    let header_cells: Vec<Cell> = tableable
+    let header_cells: Vec<Cell> = metrics_provider
         .headers()
         .into_iter()
         .map(|header| {
@@ -159,18 +249,24 @@ pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &st
 
     table.add_row(Row::new(header_cells));
 
-    for row_data in tableable.rows() {
-        let row_cells: Vec<Cell> = row_data
-            .into_iter()
-            .map(|cell_data| Cell::new(&cell_data))
-            .collect();
+    let sorted_entries = get_sorted_entries(metrics_provider);
+
+    for (function_name, metrics) in sorted_entries {
+        let mut row_cells = Vec::new();
+
+        row_cells.push(Cell::new(&function_name));
+
+        for metric in &metrics {
+            row_cells.push(Cell::new(&metric.to_string()));
+        }
+
         table.add_row(Row::new(row_cells));
     }
 
-    println!("{}", tableable.description(caller_name));
+    println!("{}", metrics_provider.description());
     table.printstd();
 
-    if tableable.has_unsupported_async() {
+    if metrics_provider.has_unsupported_async() {
         println!();
         println!(
             "* {} for async methods is currently only available for tokio {} runtime.",
@@ -184,8 +280,25 @@ pub(crate) fn display_table<'a, T: Tableable<'a>>(tableable: T, caller_name: &st
     }
 }
 
-pub(crate) trait Tableable<'a> {
-    fn description(&self, caller_name: &str) -> String;
+pub(crate) fn get_sorted_entries(
+    metrics_provider: &dyn MetricsProvider<'_>,
+) -> Vec<(String, Vec<MetricType>)> {
+    let metric_data = metrics_provider.metric_data();
+
+    let mut sorted_entries: Vec<(String, Vec<MetricType>)> = metric_data.into_iter().collect();
+    sorted_entries.sort_by(|(name_a, metrics_a), (name_b, metrics_b)| {
+        let key_a = metrics_provider.sort_key(name_a, metrics_a);
+        let key_b = metrics_provider.sort_key(name_b, metrics_b);
+        key_b
+            .partial_cmp(&key_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    sorted_entries
+}
+
+pub trait MetricsProvider<'a> {
+    fn description(&self) -> String;
     fn headers(&self) -> Vec<String> {
         let mut headers = vec![
             "Function".to_string(),
@@ -203,15 +316,34 @@ pub(crate) trait Tableable<'a> {
         headers
     }
     fn percentiles(&self) -> Vec<u8>;
-    fn rows(&self) -> Vec<Vec<String>>;
+
+    fn metric_data(&self) -> HashMap<String, Vec<MetricType>>;
+
+    fn sort_key(&self, _function_name: &str, metrics: &[MetricType]) -> f64 {
+        // Sort by percentage, higher percentages first
+        if let Some(MetricType::Percentage(basis_points)) = metrics.last() {
+            *basis_points as f64 / 100.0
+        } else {
+            0.0
+        }
+    }
+
     fn has_unsupported_async(&self) -> bool {
         false // Default implementation for time-based measurements
     }
+
     fn new(
         stats: &'a HashMap<&'static str, FunctionStats>,
         total_elapsed: Duration,
         percentiles: Vec<u8>,
-    ) -> Self;
+        caller_name: String,
+    ) -> Self
+    where
+        Self: Sized;
+
+    fn total_elapsed(&self) -> u64;
+
+    fn caller_name(&self) -> &str;
 }
 
 pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
@@ -251,42 +383,29 @@ pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &st
 pub struct TableReporter;
 
 impl Reporter for TableReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    ) {
-        if stats.is_empty() {
-            display_no_measurements_message(total_elapsed, caller_name);
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>) {
+        if metrics_provider.metric_data().is_empty() {
+            display_no_measurements_message(
+                Duration::from_nanos(metrics_provider.total_elapsed()),
+                metrics_provider.caller_name(),
+            );
             return;
         }
 
-        display_table(
-            StatsTable::new(stats, total_elapsed, percentiles.to_vec()),
-            caller_name,
-        );
+        display_table(metrics_provider);
     }
 }
 
 pub struct JsonReporter;
 
 impl Reporter for JsonReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    ) {
-        if stats.is_empty() {
-            display_no_measurements_message(total_elapsed, caller_name);
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>) {
+        if metrics_provider.metric_data().is_empty() {
+            display_no_measurements_message(Duration::ZERO, metrics_provider.caller_name());
             return;
         }
 
-        let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
-            .to_serializable_table(caller_name);
+        let json = MetricsJson::from(metrics_provider);
         println!("{}", serde_json::to_string(&json).unwrap());
     }
 }
@@ -294,20 +413,13 @@ impl Reporter for JsonReporter {
 pub struct JsonPrettyReporter;
 
 impl Reporter for JsonPrettyReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    ) {
-        if stats.is_empty() {
-            display_no_measurements_message(total_elapsed, caller_name);
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>) {
+        if metrics_provider.metric_data().is_empty() {
+            display_no_measurements_message(Duration::ZERO, metrics_provider.caller_name());
             return;
         }
 
-        let json = StatsTable::new(stats, total_elapsed, percentiles.to_vec())
-            .to_serializable_table(caller_name);
+        let json = MetricsJson::from(metrics_provider);
         println!("{}", serde_json::to_string_pretty(&json).unwrap());
     }
 }

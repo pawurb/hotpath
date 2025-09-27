@@ -365,11 +365,11 @@ pub mod tests {
     }
 
     #[test]
-    fn test_json_file_reporter_output() {
+    fn test_csv_file_reporter_output() {
         use std::fs;
         use std::path::Path;
 
-        let report_path = "hotpath_report.txt";
+        let report_path = "hotpath_report.csv";
         if Path::new(report_path).exists() {
             fs::remove_file(report_path).ok();
         }
@@ -380,7 +380,7 @@ pub mod tests {
                 "-p",
                 "hotpath-test-tokio-async",
                 "--example",
-                "file_reporter",
+                "csv_file_reporter",
                 "--features",
                 "hotpath",
             ])
@@ -400,11 +400,11 @@ pub mod tests {
         let report_content = fs::read_to_string(report_path).expect("Failed to read report file");
 
         let expected_content = [
-            "HotPath Report for: main",
+            "Function, Calls, Avg, P50, P90, P95, Total, % Total",
             "Functions measured: 3",
-            "file_reporter::async_function: 100 calls",
-            "file_reporter::sync_function: 100 calls",
-            "custom_block: 100 calls",
+            "csv_file_reporter::async_function, 100",
+            "csv_file_reporter::sync_function, 100",
+            "custom_block, 100",
         ];
 
         for expected in expected_content {
@@ -442,10 +442,10 @@ pub mod tests {
 
         let expected_content = [
             "HotPath Report for: main",
-            "Functions measured: 3",
-            "tracing_reporter::async_function: 100 calls",
-            "tracing_reporter::sync_function: 100 calls",
-            "custom_block: 100 calls",
+            "Headers: Function, Calls, Avg, P50, P90, P95, Total, % Total",
+            "tracing_reporter::async_function, 100",
+            "tracing_reporter::sync_function, 100",
+            "custom_block, 100",
         ];
 
         for expected in expected_content {
@@ -454,6 +454,76 @@ pub mod tests {
                 "Expected:\\n{expected}\\n\\nGot:\\n{stdout}",
             );
         }
+    }
+
+    #[test]
+    fn test_json_file_reporter_output() {
+        use std::fs;
+        use std::path::Path;
+
+        let report_path = "hotpath_report.json";
+        if Path::new(report_path).exists() {
+            fs::remove_file(report_path).ok();
+        }
+
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "json_file_reporter",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully: {output:?}",
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("Report saved to hotpath_report.json"),
+            "Expected success message not found in stdout: {stdout}"
+        );
+
+        assert!(
+            Path::new(report_path).exists(),
+            "JSON report file was not created"
+        );
+
+        let report_content = fs::read_to_string(report_path).expect("Failed to read report file");
+
+        let expected_content = [
+            "\"hotpath_profiling_mode\"",
+            "\"timing\"",
+            "\"total_elapsed\"",
+            "\"caller_name\"",
+            "\"main\"",
+            "\"output\"",
+            "\"json_file_reporter::async_function\"",
+            "\"json_file_reporter::sync_function\"",
+            "\"custom_block\"",
+            "\"calls\"",
+            "\"avg\"",
+            "\"total\"",
+            "\"percent_total\"",
+        ];
+
+        for expected in expected_content {
+            assert!(
+                report_content.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{report_content}",
+            );
+        }
+
+        serde_json::from_str::<serde_json::Value>(&report_content)
+            .expect("Report content is not valid JSON");
+
+        fs::remove_file(report_path).ok();
     }
 
     #[test]
