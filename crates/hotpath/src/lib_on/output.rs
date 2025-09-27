@@ -1,5 +1,4 @@
-use super::{FunctionStats, StatsData};
-use crate::lib_on::MetricsBuilder;
+use super::FunctionStats;
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
@@ -110,13 +109,7 @@ pub(crate) fn get_sorted_entries<'a, T: MetricsProvider<'a>>(
 }
 
 pub trait Reporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    );
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>, caller_name: &str);
 }
 
 #[allow(dead_code)]
@@ -246,6 +239,101 @@ pub(crate) trait MetricsProviderSerialize<'a>: MetricsProvider<'a> {
 
 impl<'a, T> MetricsProviderSerialize<'a> for T where T: MetricsProvider<'a> {}
 
+// Helper functions for working with trait objects
+pub(crate) fn display_table_dyn(metrics_provider: &dyn MetricsProvider<'_>, caller_name: &str) {
+    let use_colors = std::env::var("NO_COLOR").is_err();
+
+    let mut table = Table::new();
+
+    let header_cells: Vec<Cell> = metrics_provider
+        .headers()
+        .into_iter()
+        .map(|header| {
+            if use_colors {
+                Cell::new(&header)
+                    .with_style(Attr::Bold)
+                    .with_style(Attr::ForegroundColor(color::CYAN))
+            } else {
+                Cell::new(&header).with_style(Attr::Bold)
+            }
+        })
+        .collect();
+
+    table.add_row(Row::new(header_cells));
+
+    // Use new interface: get sorted entries and separate into names and rows
+    let sorted_entries = get_sorted_entries_dyn(metrics_provider);
+
+    for (function_name, metrics) in sorted_entries {
+        let mut row_cells = Vec::new();
+
+        // Add function name as first cell
+        row_cells.push(Cell::new(&function_name));
+
+        // Add metric data cells, using Display implementation
+        for metric in &metrics {
+            row_cells.push(Cell::new(&metric.to_string()));
+        }
+
+        table.add_row(Row::new(row_cells));
+    }
+
+    println!("{}", metrics_provider.description(caller_name));
+    table.printstd();
+
+    if metrics_provider.has_unsupported_async() {
+        println!();
+        println!(
+            "* {} for async methods is currently only available for tokio {} runtime.",
+            "alloc profiling".yellow().bold(),
+            "current_thread".green().bold()
+        );
+        println!(
+            "  Please use {} to enable it.",
+            "#[tokio::main(flavor = \"current_thread\")]".cyan().bold()
+        );
+    }
+}
+
+pub(crate) fn get_sorted_entries_dyn(
+    metrics_provider: &dyn MetricsProvider<'_>,
+) -> Vec<(String, Vec<MetricType>)> {
+    let metric_data = metrics_provider.metric_data();
+
+    let mut sorted_entries: Vec<(String, Vec<MetricType>)> = metric_data.into_iter().collect();
+    sorted_entries.sort_by(|(name_a, metrics_a), (name_b, metrics_b)| {
+        let key_a = metrics_provider.sort_key(name_a, metrics_a);
+        let key_b = metrics_provider.sort_key(name_b, metrics_b);
+        key_b
+            .partial_cmp(&key_a)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    sorted_entries
+}
+
+// Helper function to create SerializableOutput from trait object
+pub(crate) fn create_serializable_output(
+    metrics_provider: &dyn MetricsProvider<'_>,
+    _caller_name: &str,
+) -> SerializableOutput {
+    let hotpath_profiling_mode = SerializableOutput::determine_profiling_mode(&metrics_provider.headers());
+
+    // Use new interface: get sorted entries and separate into names and rows
+    let sorted_entries = get_sorted_entries_dyn(metrics_provider);
+    let (function_names, rows): (Vec<String>, Vec<Vec<MetricType>>) =
+        sorted_entries.into_iter().unzip();
+
+    SerializableOutput {
+        hotpath_profiling_mode,
+        output: SerializableTable {
+            headers: metrics_provider.headers(),
+            function_names,
+            rows,
+        },
+    }
+}
+
 pub(crate) fn display_table<'a, T: MetricsProvider<'a>>(tableable: T, caller_name: &str) {
     let use_colors = std::env::var("NO_COLOR").is_err();
 
@@ -301,7 +389,7 @@ pub(crate) fn display_table<'a, T: MetricsProvider<'a>>(tableable: T, caller_nam
     }
 }
 
-pub(crate) trait MetricsProvider<'a> {
+pub trait MetricsProvider<'a> {
     fn description(&self, caller_name: &str) -> String;
     fn headers(&self) -> Vec<String> {
         let mut headers = vec![
@@ -374,42 +462,27 @@ pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &st
 pub struct TableReporter;
 
 impl Reporter for TableReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    ) {
-        if stats.is_empty() {
-            display_no_measurements_message(total_elapsed, caller_name);
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>, caller_name: &str) {
+        if metrics_provider.metric_data().is_empty() {
+            // We don't have direct access to total_elapsed anymore, so use Duration::ZERO
+            display_no_measurements_message(Duration::ZERO, caller_name);
             return;
         }
 
-        display_table(
-            StatsData::new(stats, total_elapsed, percentiles.to_vec()),
-            caller_name,
-        );
+        display_table_dyn(metrics_provider, caller_name);
     }
 }
 
 pub struct JsonReporter;
 
 impl Reporter for JsonReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    ) {
-        if stats.is_empty() {
-            display_no_measurements_message(total_elapsed, caller_name);
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>, caller_name: &str) {
+        if metrics_provider.metric_data().is_empty() {
+            display_no_measurements_message(Duration::ZERO, caller_name);
             return;
         }
 
-        let json = StatsData::new(stats, total_elapsed, percentiles.to_vec())
-            .to_serializable_table(caller_name);
+        let json = create_serializable_output(metrics_provider, caller_name);
         println!("{}", serde_json::to_string(&json).unwrap());
     }
 }
@@ -417,20 +490,13 @@ impl Reporter for JsonReporter {
 pub struct JsonPrettyReporter;
 
 impl Reporter for JsonPrettyReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        percentiles: &[u8],
-    ) {
-        if stats.is_empty() {
-            display_no_measurements_message(total_elapsed, caller_name);
+    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>, caller_name: &str) {
+        if metrics_provider.metric_data().is_empty() {
+            display_no_measurements_message(Duration::ZERO, caller_name);
             return;
         }
 
-        let json = StatsData::new(stats, total_elapsed, percentiles.to_vec())
-            .to_serializable_table(caller_name);
+        let json = create_serializable_output(metrics_provider, caller_name);
         println!("{}", serde_json::to_string_pretty(&json).unwrap());
     }
 }

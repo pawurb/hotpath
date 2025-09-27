@@ -24,27 +24,22 @@ async fn async_function(sleep: u64) {
     tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
-use hotpath::{FunctionStats, Reporter};
-use std::collections::HashMap;
+use hotpath::Reporter;
 
 struct FileReporter;
 
 impl Reporter for FileReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        _percentiles: &[u8],
-    ) {
+    fn report(&self, metrics_provider: &dyn hotpath::MetricsProvider<'_>, caller_name: &str) {
         let mut output = String::new();
         output.push_str(&format!("HotPath Report for: {}\n", caller_name));
-        output.push_str(&format!("Total Elapsed: {:?}\n", total_elapsed));
-        output.push_str(&format!("Functions measured: {}\n", stats.len()));
+        output.push_str(&format!("Description: {}\n", metrics_provider.description(caller_name)));
+
+        let metric_data = metrics_provider.metric_data();
+        output.push_str(&format!("Functions measured: {}\n", metric_data.len()));
         output.push_str("Statistics:\n");
 
-        for (function_name, stats) in stats {
-            output.push_str(&format!("  {}: {} calls\n", function_name, stats.count));
+        for (function_name, metrics) in metric_data {
+            output.push_str(&format!("  {}: metrics={:?}\n", function_name, metrics));
         }
 
         std::fs::write("hotpath_report.txt", output).unwrap();

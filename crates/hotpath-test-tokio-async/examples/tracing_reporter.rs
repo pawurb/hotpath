@@ -24,32 +24,22 @@ async fn async_function(sleep: u64) {
     tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
-use hotpath::{FunctionStats, Reporter};
-use std::collections::HashMap;
+use hotpath::Reporter;
 use tracing::info;
 
 struct TracingReporter;
 
 impl Reporter for TracingReporter {
-    fn report(
-        &self,
-        stats: &HashMap<&'static str, FunctionStats>,
-        total_elapsed: Duration,
-        caller_name: &str,
-        _percentiles: &[u8],
-    ) {
+    fn report(&self, metrics_provider: &dyn hotpath::MetricsProvider<'_>, caller_name: &str) {
         info!("HotPath Report for: {}", caller_name);
-        info!("Total Elapsed: {:?}", total_elapsed);
-        info!("Functions measured: {}", stats.len());
+        info!("Description: {}", metrics_provider.description(caller_name));
+
+        let metric_data = metrics_provider.metric_data();
+        info!("Functions measured: {}", metric_data.len());
         info!("Statistics:");
 
-        for (function_name, stats) in stats {
-            info!(
-                "  {}: {} calls, avg {:?}",
-                function_name,
-                stats.count,
-                Duration::from_nanos(stats.avg_duration_ns())
-            );
+        for (function_name, metrics) in metric_data {
+            info!("  {}: metrics={:?}", function_name, metrics);
         }
     }
 }

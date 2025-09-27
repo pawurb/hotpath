@@ -1,6 +1,6 @@
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
-pub use output::Reporter;
+pub use output::{Reporter, MetricsProvider};
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -274,15 +274,10 @@ impl Drop for HotPath {
             if let Ok(stats) = rx.recv() {
                 if let Ok(state_guard) = state.read() {
                     let total_elapsed = end_time.duration_since(state_guard.start_time);
-                    let _metrics_provider =
+                    let metrics_provider =
                         StatsData::new(&stats, total_elapsed, state_guard.percentiles.clone());
 
-                    self.reporter.report(
-                        &stats,
-                        total_elapsed,
-                        &state_guard.caller_name,
-                        &state_guard.percentiles,
-                    );
+                    self.reporter.report(&metrics_provider, &state_guard.caller_name);
                 }
             }
         }
