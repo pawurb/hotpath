@@ -15,6 +15,10 @@ A lightweight, easy-to-configure Rust profiler that shows exactly where your cod
 
 ## Quick Start
 
+> **⚠️ Note**  
+> This README reflects the latest development on the `main` branch.
+> For documentation matching the current release, see [crates.io](https://crates.io/crates/hotpath) — it stays in sync with the published crate.
+
 Add to your `Cargo.toml`:
 
 ```toml
