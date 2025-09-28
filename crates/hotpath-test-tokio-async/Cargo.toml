@@ -9,6 +9,7 @@ hotpath = { path = "../hotpath" }
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+serde_json = "1.0"
 
 [features]
 default = []

@@ -29,18 +29,21 @@ use hotpath::Reporter;
 struct JsonFileReporter;
 
 impl Reporter for JsonFileReporter {
-    fn report(&self, metrics_provider: &dyn hotpath::MetricsProvider<'_>) {
+    fn report(
+        &self,
+        metrics_provider: &dyn hotpath::MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if metrics_provider.metric_data().is_empty() {
             println!("No metrics to report");
-            return;
+            return Ok(());
         }
 
         let json = hotpath::MetricsJson::from(metrics_provider);
 
-        match json.save_to_file("hotpath_report.json") {
-            Ok(()) => println!("Report saved to hotpath_report.json"),
-            Err(e) => eprintln!("Failed to save report: {}", e),
-        }
+        let json_string = serde_json::to_string_pretty(&json)?;
+        std::fs::write("hotpath_report.json", json_string)?;
+        println!("Report saved to hotpath_report.json");
+        Ok(())
     }
 }
 

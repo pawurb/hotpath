@@ -296,7 +296,10 @@ impl Drop for HotPath {
                         state_guard.caller_name.clone(),
                     );
 
-                    self.reporter.report(&metrics_provider);
+                    match self.reporter.report(&metrics_provider) {
+                        Ok(()) => (),
+                        Err(e) => eprintln!("Failed to report hotpath metrics: {}", e),
+                    }
                 }
             }
         }

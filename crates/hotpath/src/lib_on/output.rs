@@ -2,15 +2,14 @@ use super::FunctionStats;
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
-    de::{MapAccess, Visitor},
     ser::{SerializeMap, Serializer},
-    Deserialize, Deserializer, Serialize,
+    Deserialize, Serialize,
 };
 use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum MetricType {
     CallsCount(u64), // Number of function calls
     Timing(u64),     // Duration in nanoseconds
@@ -91,7 +90,10 @@ pub fn format_function_name(function_name: &str) -> String {
 }
 
 pub trait Reporter {
-    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>);
+    fn report(
+        &self,
+        metrics_provider: &dyn MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
 #[allow(dead_code)]
@@ -105,12 +107,46 @@ pub enum ProfilingMode {
     AllocCountMax,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone)]
 pub struct MetricsJson {
     pub hotpath_profiling_mode: ProfilingMode,
     pub total_elapsed: u64,
     pub caller_name: String,
     pub output: MetricsDataJson,
+}
+
+#[derive(Deserialize)]
+struct MetricsJsonRaw {
+    hotpath_profiling_mode: ProfilingMode,
+    total_elapsed: u64,
+    caller_name: String,
+    output: serde_json::Value,
+}
+
+impl TryFrom<MetricsJsonRaw> for MetricsJson {
+    type Error = serde::de::value::Error;
+
+    fn try_from(raw: MetricsJsonRaw) -> Result<Self, Self::Error> {
+        let output =
+            MetricsDataJson::deserialize_with_mode(raw.output, &raw.hotpath_profiling_mode)
+                .map_err(serde::de::Error::custom)?;
+        Ok(MetricsJson {
+            hotpath_profiling_mode: raw.hotpath_profiling_mode,
+            total_elapsed: raw.total_elapsed,
+            caller_name: raw.caller_name,
+            output,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for MetricsJson {
+    fn deserialize<D>(de: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let raw = MetricsJsonRaw::deserialize(de)?;
+        raw.try_into().map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -144,75 +180,80 @@ impl Serialize for MetricsDataJson {
     }
 }
 
-impl<'de> Deserialize<'de> for MetricsDataJson {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct MetricsDataJsonVisitor;
+impl MetricsDataJson {
+    pub fn deserialize_with_mode(
+        value: serde_json::Value,
+        profiling_mode: &ProfilingMode,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let map = value
+            .as_object()
+            .ok_or("Expected object for output field")?;
 
-        impl<'de> Visitor<'de> for MetricsDataJsonVisitor {
-            type Value = MetricsDataJson;
+        let mut function_names = Vec::new();
+        let mut rows = Vec::new();
+        let mut headers = Vec::new();
 
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a map of function names to metrics")
+        let mut first_entry = true;
+        for (function_name, function_data) in map {
+            function_names.push(function_name.clone());
+
+            let function_obj = function_data
+                .as_object()
+                .ok_or("Expected object for function data")?;
+
+            if first_entry {
+                headers.push("Function".to_string());
+                let mut metric_headers: Vec<String> = function_obj.keys().cloned().collect();
+                metric_headers.sort();
+                headers.extend(metric_headers.iter().cloned());
+                first_entry = false;
             }
 
-            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
-            where
-                M: MapAccess<'de>,
-            {
-                let mut function_names = Vec::new();
-                let mut rows = Vec::new();
-                let mut headers = Vec::new();
-
-                // Process the first entry to extract headers
-                if let Some((function_name, value)) =
-                    map.next_entry::<String, HashMap<String, MetricType>>()?
-                {
-                    function_names.push(function_name);
-
-                    // Build headers from the keys of the first function's metrics
-                    headers.push("Function".to_string());
-                    let mut metric_headers: Vec<String> = value.keys().cloned().collect();
-                    metric_headers.sort(); // Ensure consistent ordering
-                    headers.extend(metric_headers.iter().cloned());
-
-                    // Build the first row from the values
-                    let mut row = Vec::new();
-                    for header in &metric_headers {
-                        if let Some(metric) = value.get(header) {
-                            row.push(metric.clone());
-                        }
-                    }
-                    rows.push(row);
+            let mut row = Vec::new();
+            for header in headers.iter().skip(1) {
+                if let Some(value) = function_obj.get(header) {
+                    let value_u64 = value.as_u64().ok_or("Expected u64 value")?;
+                    let metric_type = create_metric_type(header, value_u64, profiling_mode);
+                    row.push(metric_type);
                 }
-
-                // Process remaining entries
-                while let Some((function_name, value)) =
-                    map.next_entry::<String, HashMap<String, MetricType>>()?
-                {
-                    function_names.push(function_name);
-
-                    let mut row = Vec::new();
-                    for header in headers.iter().skip(1) {
-                        // Skip "Function" header
-                        if let Some(metric) = value.get(header) {
-                            row.push(metric.clone());
-                        }
-                    }
-                    rows.push(row);
-                }
-
-                Ok(MetricsDataJson {
-                    headers,
-                    function_names,
-                    rows,
-                })
             }
+            rows.push(row);
         }
 
-        deserializer.deserialize_map(MetricsDataJsonVisitor)
+        Ok(MetricsDataJson {
+            headers,
+            function_names,
+            rows,
+        })
+    }
+}
+
+fn create_metric_type(field_name: &str, value: u64, profiling_mode: &ProfilingMode) -> MetricType {
+    match field_name {
+        "calls" => MetricType::CallsCount(value),
+        "percent_total" => MetricType::Percentage(value),
+        // Percentiles
+        name if name.starts_with('p') && name[1..].chars().all(|c| c.is_ascii_digit()) => {
+            match profiling_mode {
+                ProfilingMode::Timing => MetricType::Timing(value),
+                ProfilingMode::AllocBytesTotal | ProfilingMode::AllocBytesMax => {
+                    MetricType::AllocBytes(value)
+                }
+                ProfilingMode::AllocCountTotal | ProfilingMode::AllocCountMax => {
+                    MetricType::AllocCount(value)
+                }
+            }
+        }
+        "avg" | "total" => match profiling_mode {
+            ProfilingMode::Timing => MetricType::Timing(value),
+            ProfilingMode::AllocBytesTotal | ProfilingMode::AllocBytesMax => {
+                MetricType::AllocBytes(value)
+            }
+            ProfilingMode::AllocCountTotal | ProfilingMode::AllocCountMax => {
+                MetricType::AllocCount(value)
+            }
+        },
+        _ => unreachable!(),
     }
 }
 
@@ -228,7 +269,6 @@ impl<'a> Serialize for FunctionDataSerializer<'a> {
     {
         let mut map = serializer.serialize_map(Some(self.headers.len() - 1))?;
 
-        // Skip the first header (Function) and iterate in order
         for (i, header) in self.headers.iter().enumerate().skip(1) {
             if i - 1 < self.row.len() {
                 let key = header
@@ -279,26 +319,6 @@ impl MetricsJson {
                 ProfilingMode::Timing
             }
         }
-    }
-
-    /// Save the metrics to a JSON file
-    pub fn save_to_file<P: AsRef<std::path::Path>>(
-        &self,
-        path: P,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let json_string = serde_json::to_string_pretty(self)?;
-        std::fs::write(path, json_string)?;
-        Ok(())
-    }
-
-    /// Save the metrics to a JSON file with compact formatting
-    pub fn save_to_file_compact<P: AsRef<std::path::Path>>(
-        &self,
-        path: P,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let json_string = serde_json::to_string(self)?;
-        std::fs::write(path, json_string)?;
-        Ok(())
     }
 }
 
@@ -457,43 +477,402 @@ pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &st
 pub struct TableReporter;
 
 impl Reporter for TableReporter {
-    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>) {
+    fn report(
+        &self,
+        metrics_provider: &dyn MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if metrics_provider.metric_data().is_empty() {
             display_no_measurements_message(
                 Duration::from_nanos(metrics_provider.total_elapsed()),
                 metrics_provider.caller_name(),
             );
-            return;
+            return Ok(());
         }
 
         display_table(metrics_provider);
+        Ok(())
     }
 }
 
 pub struct JsonReporter;
 
 impl Reporter for JsonReporter {
-    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>) {
+    fn report(
+        &self,
+        metrics_provider: &dyn MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if metrics_provider.metric_data().is_empty() {
             display_no_measurements_message(Duration::ZERO, metrics_provider.caller_name());
-            return;
+            return Ok(());
         }
 
         let json = MetricsJson::from(metrics_provider);
         println!("{}", serde_json::to_string(&json).unwrap());
+        Ok(())
     }
 }
 
 pub struct JsonPrettyReporter;
 
 impl Reporter for JsonPrettyReporter {
-    fn report(&self, metrics_provider: &dyn MetricsProvider<'_>) {
+    fn report(
+        &self,
+        metrics_provider: &dyn MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if metrics_provider.metric_data().is_empty() {
             display_no_measurements_message(Duration::ZERO, metrics_provider.caller_name());
-            return;
+            return Ok(());
         }
 
         let json = MetricsJson::from(metrics_provider);
-        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+        println!("{}", serde_json::to_string_pretty(&json)?);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_deserialize_timing_mode() {
+        let json_str = r#"{
+            "hotpath_profiling_mode": "timing",
+            "total_elapsed": 125189584,
+            "caller_name": "basic::main",
+            "output": {
+                "basic::async_function": {
+                    "calls": 100,
+                    "avg": 1174672,
+                    "p95": 1201151,
+                    "total": 117467210,
+                    "percent_total": 9383
+                },
+                "basic::sync_function": {
+                    "calls": 100,
+                    "avg": 22563,
+                    "p95": 33887,
+                    "total": 2256381,
+                    "percent_total": 180
+                },
+                "custom_block": {
+                    "calls": 100,
+                    "avg": 21936,
+                    "p95": 33087,
+                    "total": 2193628,
+                    "percent_total": 175
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson =
+            serde_json::from_str(json_str).expect("Failed to deserialize timing mode JSON");
+
+        assert!(matches!(
+            metrics.hotpath_profiling_mode,
+            ProfilingMode::Timing
+        ));
+        assert_eq!(metrics.total_elapsed, 125189584);
+        assert_eq!(metrics.caller_name, "basic::main");
+        assert_eq!(metrics.output.function_names.len(), 3);
+        assert!(metrics
+            .output
+            .function_names
+            .contains(&"basic::async_function".to_string()));
+        assert!(metrics
+            .output
+            .function_names
+            .contains(&"basic::sync_function".to_string()));
+        assert!(metrics
+            .output
+            .function_names
+            .contains(&"custom_block".to_string()));
+
+        // Verify that timing mode creates Timing MetricTypes for avg, p95, total
+        let first_row = &metrics.output.rows[0];
+        assert!(matches!(first_row[0], MetricType::Timing(_))); // avg
+        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[2], MetricType::Timing(_))); // p95
+        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
+        assert!(matches!(first_row[4], MetricType::Timing(_))); // total
+    }
+
+    #[test]
+    fn test_deserialize_alloc_count_max_mode() {
+        let json_str = r#"{
+            "hotpath_profiling_mode": "alloc-count-max",
+            "total_elapsed": 123848875,
+            "caller_name": "basic::main",
+            "output": {
+                "custom_block": {
+                    "calls": 100,
+                    "avg": 2,
+                    "p95": 2,
+                    "total": 200,
+                    "percent_total": 5000
+                },
+                "basic::sync_function": {
+                    "calls": 100,
+                    "avg": 1,
+                    "p95": 1,
+                    "total": 100,
+                    "percent_total": 2500
+                },
+                "basic::async_function": {
+                    "calls": 100,
+                    "avg": 1,
+                    "p95": 1,
+                    "total": 100,
+                    "percent_total": 2500
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson = serde_json::from_str(json_str)
+            .expect("Failed to deserialize alloc-count-max mode JSON");
+
+        assert!(matches!(
+            metrics.hotpath_profiling_mode,
+            ProfilingMode::AllocCountMax
+        ));
+        assert_eq!(metrics.total_elapsed, 123848875);
+        assert_eq!(metrics.caller_name, "basic::main");
+        assert_eq!(metrics.output.function_names.len(), 3);
+        assert!(metrics
+            .output
+            .function_names
+            .contains(&"custom_block".to_string()));
+        assert!(metrics
+            .output
+            .function_names
+            .contains(&"basic::sync_function".to_string()));
+        assert!(metrics
+            .output
+            .function_names
+            .contains(&"basic::async_function".to_string()));
+
+        let first_row = &metrics.output.rows[0];
+        assert!(matches!(first_row[0], MetricType::AllocCount(_))); // avg
+        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[2], MetricType::AllocCount(_))); // p95
+        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
+        assert!(matches!(first_row[4], MetricType::AllocCount(_))); // total
+    }
+
+    #[test]
+    fn test_deserialize_alloc_count_total_mode() {
+        let json_str = r#"{
+            "hotpath_profiling_mode": "alloc-count-total",
+            "total_elapsed": 123762083,
+            "caller_name": "basic::main",
+            "output": {
+                "basic::sync_function": {
+                    "calls": 100,
+                    "avg": 2,
+                    "p95": 2,
+                    "total": 200,
+                    "percent_total": 3333
+                },
+                "basic::async_function": {
+                    "calls": 100,
+                    "avg": 2,
+                    "p95": 2,
+                    "total": 200,
+                    "percent_total": 3333
+                },
+                "custom_block": {
+                    "calls": 100,
+                    "avg": 2,
+                    "p95": 2,
+                    "total": 200,
+                    "percent_total": 3333
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson = serde_json::from_str(json_str)
+            .expect("Failed to deserialize alloc-count-total mode JSON");
+
+        assert!(matches!(
+            metrics.hotpath_profiling_mode,
+            ProfilingMode::AllocCountTotal
+        ));
+        assert_eq!(metrics.total_elapsed, 123762083);
+        assert_eq!(metrics.caller_name, "basic::main");
+        assert_eq!(metrics.output.function_names.len(), 3);
+
+        let first_row = &metrics.output.rows[0];
+        assert!(matches!(first_row[0], MetricType::AllocCount(_))); // avg
+        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[2], MetricType::AllocCount(_))); // p95
+        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
+        assert!(matches!(first_row[4], MetricType::AllocCount(_))); // total
+    }
+
+    #[test]
+    fn test_deserialize_alloc_bytes_max_mode() {
+        let json_str = r#"{
+            "hotpath_profiling_mode": "alloc-bytes-max",
+            "total_elapsed": 119932458,
+            "caller_name": "basic::main",
+            "output": {
+                "custom_block": {
+                    "calls": 100,
+                    "avg": 1088,
+                    "p95": 1088,
+                    "total": 108800,
+                    "percent_total": 9066
+                },
+                "basic::sync_function": {
+                    "calls": 100,
+                    "avg": 76,
+                    "p95": 76,
+                    "total": 7600,
+                    "percent_total": 633
+                },
+                "basic::async_function": {
+                    "calls": 100,
+                    "avg": 36,
+                    "p95": 36,
+                    "total": 3600,
+                    "percent_total": 300
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson = serde_json::from_str(json_str)
+            .expect("Failed to deserialize alloc-bytes-max mode JSON");
+
+        assert!(matches!(
+            metrics.hotpath_profiling_mode,
+            ProfilingMode::AllocBytesMax
+        ));
+        assert_eq!(metrics.total_elapsed, 119932458);
+        assert_eq!(metrics.caller_name, "basic::main");
+        assert_eq!(metrics.output.function_names.len(), 3);
+
+        let first_row = &metrics.output.rows[0];
+        assert!(matches!(first_row[0], MetricType::AllocBytes(_))); // avg
+        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[2], MetricType::AllocBytes(_))); // p95
+        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
+        assert!(matches!(first_row[4], MetricType::AllocBytes(_))); // total
+    }
+
+    #[test]
+    fn test_deserialize_alloc_bytes_total_mode() {
+        let json_str = r#"{
+            "hotpath_profiling_mode": "alloc-bytes-total",
+            "total_elapsed": 121738041,
+            "caller_name": "basic::main",
+            "output": {
+                "custom_block": {
+                    "calls": 100,
+                    "avg": 1088,
+                    "p95": 1088,
+                    "total": 108800,
+                    "percent_total": 8292
+                },
+                "basic::sync_function": {
+                    "calls": 100,
+                    "avg": 152,
+                    "p95": 152,
+                    "total": 15200,
+                    "percent_total": 1158
+                },
+                "basic::async_function": {
+                    "calls": 100,
+                    "avg": 72,
+                    "p95": 72,
+                    "total": 7200,
+                    "percent_total": 548
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson = serde_json::from_str(json_str)
+            .expect("Failed to deserialize alloc-bytes-total mode JSON");
+
+        assert!(matches!(
+            metrics.hotpath_profiling_mode,
+            ProfilingMode::AllocBytesTotal
+        ));
+        assert_eq!(metrics.total_elapsed, 121738041);
+        assert_eq!(metrics.caller_name, "basic::main");
+        assert_eq!(metrics.output.function_names.len(), 3);
+
+        let first_row = &metrics.output.rows[0];
+        assert!(matches!(first_row[0], MetricType::AllocBytes(_))); // avg
+        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[2], MetricType::AllocBytes(_))); // p95
+        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
+        assert!(matches!(first_row[4], MetricType::AllocBytes(_))); // total
+    }
+
+    use serde_json::Value;
+
+    #[test]
+    fn test_serialize_deserialize_roundtrip() {
+        let original_json_str = r#"{
+            "hotpath_profiling_mode": "timing",
+            "total_elapsed": 125189584,
+            "caller_name": "basic::main",
+            "output": {
+                "basic::async_function": {
+                    "calls": 100,
+                    "avg": 1174672,
+                    "p95": 1201151,
+                    "total": 117467210,
+                    "percent_total": 9383
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson =
+            serde_json::from_str(original_json_str).expect("Failed to deserialize");
+        let serialized_str = serde_json::to_string(&metrics).expect("Failed to serialize");
+
+        let original_json: Value = serde_json::from_str(original_json_str).unwrap();
+        let serialized_json: Value = serde_json::from_str(&serialized_str).unwrap();
+        assert_eq!(serialized_json, original_json);
+    }
+
+    #[test]
+    fn test_metric_data_structure() {
+        let json_str = r#"{
+            "hotpath_profiling_mode": "timing",
+            "total_elapsed": 125189584,
+            "caller_name": "basic::main",
+            "output": {
+                "test_function": {
+                    "calls": 42,
+                    "avg": 1000,
+                    "p95": 2000,
+                    "total": 42000,
+                    "percent_total": 100
+                }
+            }
+        }"#;
+
+        let metrics: MetricsJson = serde_json::from_str(json_str).expect("Failed to deserialize");
+
+        // Verify that the internal structure is correctly parsed
+        assert_eq!(metrics.output.headers.len(), 6); // Function, calls, avg, p95, total, percent_total
+        assert_eq!(metrics.output.headers[0], "Function");
+        assert!(metrics.output.headers.contains(&"calls".to_string()));
+        assert!(metrics.output.headers.contains(&"avg".to_string()));
+        assert!(metrics.output.headers.contains(&"p95".to_string()));
+        assert!(metrics.output.headers.contains(&"total".to_string()));
+        assert!(metrics
+            .output
+            .headers
+            .contains(&"percent_total".to_string()));
+
+        assert_eq!(metrics.output.function_names.len(), 1);
+        assert_eq!(metrics.output.function_names[0], "test_function");
+
+        assert_eq!(metrics.output.rows.len(), 1);
+        assert_eq!(metrics.output.rows[0].len(), 5); // All metrics except function name
     }
 }

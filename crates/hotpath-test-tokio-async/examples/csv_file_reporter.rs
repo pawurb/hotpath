@@ -29,7 +29,10 @@ use hotpath::Reporter;
 struct FileReporter;
 
 impl Reporter for FileReporter {
-    fn report(&self, metrics_provider: &dyn hotpath::MetricsProvider<'_>) {
+    fn report(
+        &self,
+        metrics_provider: &dyn hotpath::MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let mut output = String::new();
         output.push_str(&format!(
             "HotPath Report for: {}\n",
@@ -57,7 +60,8 @@ impl Reporter for FileReporter {
             ));
         }
 
-        std::fs::write("hotpath_report.csv", output).unwrap();
+        std::fs::write("hotpath_report.csv", output)?;
+        Ok(())
     }
 }
 

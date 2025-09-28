@@ -30,7 +30,10 @@ use tracing::{info, info_span};
 struct TracingReporter;
 
 impl Reporter for TracingReporter {
-    fn report(&self, metrics_provider: &dyn hotpath::MetricsProvider<'_>) {
+    fn report(
+        &self,
+        metrics_provider: &dyn hotpath::MetricsProvider<'_>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         info!("HotPath Report for: {}", metrics_provider.caller_name());
         info!("Headers: {}", metrics_provider.headers().join(", "));
 
@@ -49,6 +52,8 @@ impl Reporter for TracingReporter {
                     .join(", ")
             );
         }
+
+        Ok(())
     }
 }
 
