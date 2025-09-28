@@ -380,9 +380,9 @@ pub(crate) fn get_sorted_entries(
     let metric_data = metrics_provider.metric_data();
 
     let mut sorted_entries: Vec<(String, Vec<MetricType>)> = metric_data.into_iter().collect();
-    sorted_entries.sort_by(|(name_a, metrics_a), (name_b, metrics_b)| {
-        let key_a = metrics_provider.sort_key(name_a, metrics_a);
-        let key_b = metrics_provider.sort_key(name_b, metrics_b);
+    sorted_entries.sort_by(|(_name_a, metrics_a), (_name_b, metrics_b)| {
+        let key_a = metrics_provider.sort_key(metrics_a);
+        let key_b = metrics_provider.sort_key(metrics_b);
         key_b
             .partial_cmp(&key_a)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -413,7 +413,7 @@ pub trait MetricsProvider<'a> {
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>>;
 
-    fn sort_key(&self, _function_name: &str, metrics: &[MetricType]) -> f64 {
+    fn sort_key(&self, metrics: &[MetricType]) -> f64 {
         // Sort by percentage, higher percentages first
         if let Some(MetricType::Percentage(basis_points)) = metrics.last() {
             *basis_points as f64 / 100.0
