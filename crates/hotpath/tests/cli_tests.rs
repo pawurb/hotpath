@@ -41,9 +41,9 @@ pub mod tests {
                 "custom_block",
                 "basic::sync_function",
                 "basic::async_function",
-                "P95",
-                "Total",
-                "% Total",
+                "p95",
+                "total",
+                "percent_total",
             ];
 
             let stdout = String::from_utf8_lossy(&output.stdout);

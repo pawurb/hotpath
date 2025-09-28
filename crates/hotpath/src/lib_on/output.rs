@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub enum MetricType {
     CallsCount(u64), // Number of function calls
     Timing(u64),     // Duration in nanoseconds
@@ -18,6 +18,22 @@ pub enum MetricType {
     AllocCount(u64), // Allocation count
     Percentage(u64), // Percentage as basis points (1% = 100)
     Unsupported,     // For N/A values (async functions when not supported)
+}
+
+impl Serialize for MetricType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            MetricType::CallsCount(count) => serializer.serialize_u64(*count),
+            MetricType::Timing(ns) => serializer.serialize_u64(*ns),
+            MetricType::AllocBytes(bytes) => serializer.serialize_u64(*bytes),
+            MetricType::AllocCount(count) => serializer.serialize_u64(*count),
+            MetricType::Percentage(basis_points) => serializer.serialize_u64(*basis_points),
+            MetricType::Unsupported => serializer.serialize_none(),
+        }
+    }
 }
 
 impl fmt::Display for MetricType {
