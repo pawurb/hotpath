@@ -2,14 +2,15 @@ use super::FunctionStats;
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
+    de::{MapAccess, Visitor},
     ser::{SerializeMap, Serializer},
-    Serialize,
+    Deserialize, Deserializer, Serialize,
 };
 use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MetricType {
     CallsCount(u64), // Number of function calls
     Timing(u64),     // Duration in nanoseconds
@@ -41,22 +42,6 @@ impl fmt::Display for MetricType {
             MetricType::Unsupported => {
                 write!(f, "N/A*")
             }
-        }
-    }
-}
-
-impl Serialize for MetricType {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match self {
-            MetricType::CallsCount(count) => serializer.serialize_u64(*count),
-            MetricType::Timing(ns) => serializer.serialize_u64(*ns),
-            MetricType::AllocBytes(bytes) => serializer.serialize_u64(*bytes),
-            MetricType::AllocCount(count) => serializer.serialize_u64(*count),
-            MetricType::Percentage(basis_points) => serializer.serialize_u64(*basis_points),
-            MetricType::Unsupported => serializer.serialize_none(),
         }
     }
 }
@@ -94,7 +79,7 @@ pub trait Reporter {
 }
 
 #[allow(dead_code)]
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProfilingMode {
     Timing,
@@ -104,7 +89,7 @@ pub enum ProfilingMode {
     AllocCountMax,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct MetricsJson {
     pub hotpath_profiling_mode: ProfilingMode,
     pub total_elapsed: u64,
@@ -139,6 +124,78 @@ impl Serialize for MetricsDataJson {
         }
 
         map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for MetricsDataJson {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct MetricsDataJsonVisitor;
+
+        impl<'de> Visitor<'de> for MetricsDataJsonVisitor {
+            type Value = MetricsDataJson;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a map of function names to metrics")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let mut function_names = Vec::new();
+                let mut rows = Vec::new();
+                let mut headers = Vec::new();
+
+                // Process the first entry to extract headers
+                if let Some((function_name, value)) =
+                    map.next_entry::<String, HashMap<String, MetricType>>()?
+                {
+                    function_names.push(function_name);
+
+                    // Build headers from the keys of the first function's metrics
+                    headers.push("Function".to_string());
+                    let mut metric_headers: Vec<String> = value.keys().cloned().collect();
+                    metric_headers.sort(); // Ensure consistent ordering
+                    headers.extend(metric_headers.iter().cloned());
+
+                    // Build the first row from the values
+                    let mut row = Vec::new();
+                    for header in &metric_headers {
+                        if let Some(metric) = value.get(header) {
+                            row.push(metric.clone());
+                        }
+                    }
+                    rows.push(row);
+                }
+
+                // Process remaining entries
+                while let Some((function_name, value)) =
+                    map.next_entry::<String, HashMap<String, MetricType>>()?
+                {
+                    function_names.push(function_name);
+
+                    let mut row = Vec::new();
+                    for header in headers.iter().skip(1) {
+                        // Skip "Function" header
+                        if let Some(metric) = value.get(header) {
+                            row.push(metric.clone());
+                        }
+                    }
+                    rows.push(row);
+                }
+
+                Ok(MetricsDataJson {
+                    headers,
+                    function_names,
+                    rows,
+                })
+            }
+        }
+
+        deserializer.deserialize_map(MetricsDataJsonVisitor)
     }
 }
 
