@@ -56,11 +56,9 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_async_function() {
         #[cfg(feature = "hotpath")]
-        let _hotpath = hotpath::init(
-            "test_async_function".to_string(),
-            &[50, 90, 95],
-            hotpath::Format::Table,
-        );
+        let _hotpath = hotpath::HotPathBuilder::new("test_async_function")
+            .percentiles(&[50, 90, 95])
+            .build();
 
         async_function(100).await;
     }

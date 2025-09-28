@@ -155,9 +155,13 @@ It ensures that tokio runs in a `current_thread` runtime mode if any of the allo
 
 ## API
 
-`#[cfg_attr(feature = "hotpath", hotpath::main]`
+### Macros
 
-Attribute macro that initializes the background measurement processing when applied.
+`#[cfg_attr(feature = "hotpath", hotpath::main)]`
+
+Attribute macro that initializes the background measurement processing when applied. Supports parameters:
+- `percentiles = [50, 95, 99]` - Custom percentiles to display
+- `format = "json"` - Output format ("table", "json", "json-pretty")
 
 `#[cfg_attr(feature = "hotpath", hotpath::measure)]`
 
@@ -167,18 +171,38 @@ An opt-in attribute macro that instruments functions to send timing measurements
 
 Macro that measures the execution time of a code block with a static string label.
 
-### Using `hotpath::main` macro vs `hotpath::init` guard
+### HotPathBuilder API
 
-The `#[hotpath::main]` macro is convenient for most use cases, but `hotpath::init()` provides more control over when profiling starts and stops. 
+`hotpath::HotPathBuilder::new(caller_name)` - Create a new builder with the specified caller name
+
+**Configuration methods:**
+- `.percentiles(&[u8])` - Set custom percentiles to display (default: [95])
+- `.format(Format)` - Set output format (Table, Json, JsonPretty)
+- `.reporter(Box<dyn Reporter>)` - Set custom reporter (overrides format)
+- `.build()` - Build and return the HotPath guard
+
+**Example:**
+```rust
+let _guard = hotpath::HotPathBuilder::new("my_benchmark")
+    .percentiles(&[50, 90, 95, 99])
+    .format(hotpath::Format::JsonPretty)
+    .build();
+```
+
+## Usage Patterns
+
+### Using `hotpath::main` macro vs `HotPathBuilder` API
+
+The `#[hotpath::main]` macro is convenient for most use cases, but the `HotPathBuilder` API provides more control over when profiling starts and stops.
 
 Key differences:
 
 - **`#[hotpath::main]`** - Automatic initialization and cleanup, report printed at program exit
-- **`let _guard = hotpath::init()`** - Manual control, report printed when guard is dropped, so you can fine-tune the measured scope. 
+- **`let _guard = HotPathBuilder::new("name").build()`** - Manual control, report printed when guard is dropped, so you can fine-tune the measured scope.
 
-Only one hotpath guard may be alive at a time, regardless of whether it was created by the `main` macro or by `init()`. If a second guard is created, the library will panic. 
+Only one hotpath guard may be alive at a time, regardless of whether it was created by the `main` macro or by the builder API. If a second guard is created, the library will panic.
 
-#### Using `hotpath::init()` for more control
+#### Using `HotPathBuilder` for more control
 
 ```rust
 use std::time::Duration;
@@ -190,17 +214,16 @@ fn example_function() {
 
 fn main() {
     #[cfg(feature = "hotpath")]
-    let _guard = hotpath::init(
-        "my_program".to_string(),
-        &[50, 95, 99],
-        hotpath::Format::Table
-    );
+    let _guard = hotpath::HotPathBuilder::new("my_program")
+        .percentiles(&[50, 95, 99])
+        .format(hotpath::Format::Table)
+        .build();
 
     example_function();
 
     // This will print the report.
     #[cfg(feature = "hotpath")]
-    drop(_hotpath);
+    drop(_guard);
 
     // Immediate exit (no drops); `#[hotpath::main]` wouldn't print.
     std::process::exit(1);
@@ -219,22 +242,20 @@ mod tests {
     #[test]
     fn test_sync_function() {
         #[cfg(feature = "hotpath")]
-        let _hotpath = hotpath::init(
-            "test_sync_function".to_string(),
-            &[50, 90, 95],
-            hotpath::Format::Table,
-        );
+        let _hotpath = hotpath::HotPathBuilder::new("test_sync_function")
+            .percentiles(&[50, 90, 95])
+            .format(hotpath::Format::Table)
+            .build();
         sync_function();
     }
 
     #[tokio::test(flavor = "current_thread")]
     async fn test_async_function() {
         #[cfg(feature = "hotpath")]
-        let _hotpath = hotpath::init(
-            "test_async_function".to_string(),
-            &[50, 90, 95],
-            hotpath::Format::Table,
-        );
+        let _hotpath = hotpath::HotPathBuilder::new("test_async_function")
+            .percentiles(&[50, 90, 95])
+            .format(hotpath::Format::Table)
+            .build();
 
         async_function().await;
     }
@@ -316,7 +337,7 @@ You can implement your own reporting to control how profiling results are handle
 
 For complete working examples, see:
 - [`examples/csv_file_reporter.rs`](crates/hotpath-test-tokio-async/examples/csv_file_reporter.rs) - Save metrics to CSV file
-- [`examples/json_file_reporter.rs`](crates/hotpath-test-tokio-async/examples/json_file_reporter.rs) - Save metrics to JSON file 
+- [`examples/json_file_reporter.rs`](crates/hotpath-test-tokio-async/examples/json_file_reporter.rs) - Save metrics to JSON file
 - [`examples/tracing_reporter.rs`](crates/hotpath-test-tokio-async/examples/tracing_reporter.rs) - Log metrics using the tracing crate 
 
 ## Benchmarking

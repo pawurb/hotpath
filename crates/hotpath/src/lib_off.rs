@@ -25,3 +25,23 @@ pub struct HotPath;
 impl Drop for HotPath {
     fn drop(&mut self) {}
 }
+
+pub struct HotPathBuilder {}
+
+impl HotPathBuilder {
+    pub fn new(_caller_name: impl Into<String>) -> Self {
+        Self {}
+    }
+
+    pub fn percentiles(self, _percentiles: &[u8]) -> Self {
+        self
+    }
+
+    pub fn format(self, _format: Format) -> Self {
+        self
+    }
+
+    pub fn build(self) -> HotPath {
+        HotPath
+    }
+}

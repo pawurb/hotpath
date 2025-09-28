@@ -147,7 +147,58 @@ compile_error!("Only one allocation feature can be enabled at a time");
 
 pub static HOTPATH_STATE: OnceLock<ArcSwapOption<RwLock<HotPathState>>> = OnceLock::new();
 
-pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath {
+pub struct HotPathBuilder {
+    caller_name: String,
+    percentiles: Vec<u8>,
+    reporter: ReporterConfig,
+}
+
+enum ReporterConfig {
+    Format(Format),
+    Custom(Box<dyn Reporter>),
+    None, // Will default to Format::Table
+}
+
+impl HotPathBuilder {
+    pub fn new(caller_name: impl Into<String>) -> Self {
+        Self {
+            caller_name: caller_name.into(),
+            percentiles: vec![95],
+            reporter: ReporterConfig::None,
+        }
+    }
+
+    pub fn percentiles(mut self, percentiles: &[u8]) -> Self {
+        self.percentiles = percentiles.to_vec();
+        self
+    }
+
+    pub fn format(mut self, format: Format) -> Self {
+        self.reporter = ReporterConfig::Format(format);
+        self
+    }
+
+    pub fn reporter(mut self, reporter: Box<dyn Reporter>) -> Self {
+        self.reporter = ReporterConfig::Custom(reporter);
+        self
+    }
+
+    pub fn build(self) -> HotPath {
+        let reporter: Box<dyn Reporter> = match self.reporter {
+            ReporterConfig::Format(format) => match format {
+                Format::Table => Box::new(output::TableReporter),
+                Format::Json => Box::new(output::JsonReporter),
+                Format::JsonPretty => Box::new(output::JsonPrettyReporter),
+            },
+            ReporterConfig::Custom(reporter) => reporter,
+            ReporterConfig::None => Box::new(output::TableReporter),
+        };
+
+        init_hotpath(self.caller_name, &self.percentiles, reporter)
+    }
+}
+
+fn init_hotpath(caller_name: String, percentiles: &[u8], reporter: Box<dyn Reporter>) -> HotPath {
     let percentiles = percentiles.to_vec();
 
     let arc_swap = HOTPATH_STATE.get_or_init(|| ArcSwapOption::from(None));
@@ -168,7 +219,6 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
         start_time,
         caller_name,
         percentiles,
-        format,
     }));
 
     thread::Builder::new()
@@ -203,12 +253,6 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
 
     arc_swap.store(Some(Arc::clone(&state_arc)));
 
-    let reporter: Box<dyn Reporter> = match format {
-        Format::Table => Box::new(output::TableReporter),
-        Format::Json => Box::new(output::JsonReporter),
-        Format::JsonPretty => Box::new(output::JsonPrettyReporter),
-    };
-
     HotPath {
         state: Arc::clone(&state_arc),
         reporter,
@@ -217,12 +261,6 @@ pub fn init(caller_name: String, percentiles: &[u8], format: Format) -> HotPath 
 pub struct HotPath {
     state: Arc<RwLock<HotPathState>>,
     reporter: Box<dyn Reporter>,
-}
-
-impl HotPath {
-    pub fn set_reporter(&mut self, reporter: Box<dyn Reporter>) {
-        self.reporter = reporter;
-    }
 }
 
 impl Drop for HotPath {

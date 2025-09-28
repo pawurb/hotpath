@@ -27,11 +27,9 @@ async fn async_function(sleep: u64) {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "hotpath")]
-    let _hotpath = hotpath::init(
-        "custom_guard".to_string(),
-        &[50, 90, 95],
-        hotpath::Format::Table,
-    );
+    let _hotpath = hotpath::HotPathBuilder::new("custom_guard")
+        .percentiles(&[50, 90, 95])
+        .build();
 
     for i in 0..50 {
         sync_function(i);

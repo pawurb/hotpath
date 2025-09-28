@@ -63,8 +63,10 @@ impl Reporter for FileReporter {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut hotpath = hotpath::init("main".to_string(), &[50, 90, 95], hotpath::Format::Table);
-    hotpath.set_reporter(Box::new(FileReporter));
+    let _hotpath = hotpath::HotPathBuilder::new("main")
+        .percentiles(&[50, 90, 95])
+        .reporter(Box::new(FileReporter))
+        .build();
 
     for i in 0..100 {
         sync_function(i);

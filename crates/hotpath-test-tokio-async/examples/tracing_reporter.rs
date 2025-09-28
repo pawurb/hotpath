@@ -56,8 +56,10 @@ impl Reporter for TracingReporter {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let mut hotpath = hotpath::init("main".to_string(), &[50, 90, 95], hotpath::Format::Table);
-    hotpath.set_reporter(Box::new(TracingReporter));
+    let _hotpath = hotpath::HotPathBuilder::new("main")
+        .percentiles(&[50, 90, 95])
+        .reporter(Box::new(TracingReporter))
+        .build();
 
     for i in 0..100 {
         sync_function(i);
