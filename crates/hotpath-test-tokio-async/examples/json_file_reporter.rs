@@ -46,7 +46,7 @@ impl Reporter for JsonFileReporter {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let _hotpath = hotpath::HotPathBuilder::new("main")
+    let _hotpath = hotpath::GuardBuilder::new("main")
         .percentiles(&[50, 90, 95])
         .reporter(Box::new(JsonFileReporter))
         .build();

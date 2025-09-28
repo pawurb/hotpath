@@ -26,9 +26,9 @@ impl Drop for HotPath {
     fn drop(&mut self) {}
 }
 
-pub struct HotPathBuilder {}
+pub struct GuardBuilder {}
 
-impl HotPathBuilder {
+impl GuardBuilder {
     pub fn new(_caller_name: impl Into<String>) -> Self {
         Self {}
     }

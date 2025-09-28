@@ -147,7 +147,7 @@ compile_error!("Only one allocation feature can be enabled at a time");
 
 pub static HOTPATH_STATE: OnceLock<ArcSwapOption<RwLock<HotPathState>>> = OnceLock::new();
 
-pub struct HotPathBuilder {
+pub struct GuardBuilder {
     caller_name: String,
     percentiles: Vec<u8>,
     reporter: ReporterConfig,
@@ -159,7 +159,7 @@ enum ReporterConfig {
     None, // Will default to Format::Table
 }
 
-impl HotPathBuilder {
+impl GuardBuilder {
     pub fn new(caller_name: impl Into<String>) -> Self {
         Self {
             caller_name: caller_name.into(),

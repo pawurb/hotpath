@@ -175,9 +175,9 @@ An opt-in attribute macro that instruments functions to send timing measurements
 
 Macro that measures the execution time of a code block with a static string label.
 
-### HotPathBuilder API
+### GuardBuilder API
 
-`hotpath::HotPathBuilder::new(caller_name)` - Create a new builder with the specified caller name
+`hotpath::GuardBuilder::new(caller_name)` - Create a new builder with the specified caller name
 
 **Configuration methods:**
 - `.percentiles(&[u8])` - Set custom percentiles to display (default: [95])
@@ -187,7 +187,7 @@ Macro that measures the execution time of a code block with a static string labe
 
 **Example:**
 ```rust
-let _guard = hotpath::HotPathBuilder::new("my_benchmark")
+let _guard = hotpath::GuardBuilder::new("main")
     .percentiles(&[50, 90, 95, 99])
     .format(hotpath::Format::JsonPretty)
     .build();
@@ -195,18 +195,18 @@ let _guard = hotpath::HotPathBuilder::new("my_benchmark")
 
 ## Usage Patterns
 
-### Using `hotpath::main` macro vs `HotPathBuilder` API
+### Using `hotpath::main` macro vs `GuardBuilder` API
 
-The `#[hotpath::main]` macro is convenient for most use cases, but the `HotPathBuilder` API provides more control over when profiling starts and stops.
+The `#[hotpath::main]` macro is convenient for most use cases, but the `GuardBuilder` API provides more control over when profiling starts and stops.
 
 Key differences:
 
 - **`#[hotpath::main]`** - Automatic initialization and cleanup, report printed at program exit
-- **`let _guard = HotPathBuilder::new("name").build()`** - Manual control, report printed when guard is dropped, so you can fine-tune the measured scope.
+- **`let _guard = GuardBuilder::new("name").build()`** - Manual control, report printed when guard is dropped, so you can fine-tune the measured scope.
 
 Only one hotpath guard may be alive at a time, regardless of whether it was created by the `main` macro or by the builder API. If a second guard is created, the library will panic.
 
-#### Using `HotPathBuilder` for more control
+#### Using `GuardBuilder` for more control
 
 ```rust
 use std::time::Duration;
@@ -218,7 +218,7 @@ fn example_function() {
 
 fn main() {
     #[cfg(feature = "hotpath")]
-    let _guard = hotpath::HotPathBuilder::new("my_program")
+    let _guard = hotpath::GuardBuilder::new("my_program")
         .percentiles(&[50, 95, 99])
         .format(hotpath::Format::Table)
         .build();
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_sync_function() {
         #[cfg(feature = "hotpath")]
-        let _hotpath = hotpath::HotPathBuilder::new("test_sync_function")
+        let _hotpath = hotpath::GuardBuilder::new("test_sync_function")
             .percentiles(&[50, 90, 95])
             .format(hotpath::Format::Table)
             .build();
@@ -256,7 +256,7 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn test_async_function() {
         #[cfg(feature = "hotpath")]
-        let _hotpath = hotpath::HotPathBuilder::new("test_async_function")
+        let _hotpath = hotpath::GuardBuilder::new("test_async_function")
             .percentiles(&[50, 90, 95])
             .format(hotpath::Format::Table)
             .build();

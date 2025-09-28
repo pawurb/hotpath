@@ -27,7 +27,7 @@ async fn async_function(sleep: u64) {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "hotpath")]
-    let _hotpath = hotpath::HotPathBuilder::new("custom_guard")
+    let _hotpath = hotpath::GuardBuilder::new("custom_guard")
         .percentiles(&[50, 90, 95])
         .build();
 

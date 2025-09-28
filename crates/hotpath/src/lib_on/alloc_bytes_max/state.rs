@@ -111,7 +111,7 @@ use crate::lib_on::HOTPATH_STATE;
 
 pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {
-        panic!("HotPathBuilder::new(\"main\").build() must be called when --features hotpath-alloc-bytes-max is enabled");
+        panic!("GuardBuilder::new(\"main\").build() must be called when --features hotpath-alloc-bytes-max is enabled");
     };
 
     let Some(state) = arc_swap.load_full() else {

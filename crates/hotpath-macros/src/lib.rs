@@ -95,7 +95,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                     .unwrap_or(std::any::type_name_of_val(&__caller_fn))
                     .replace("::{{closure}}", "");
 
-                hotpath::HotPathBuilder::new(caller_name.to_string())
+                hotpath::GuardBuilder::new(caller_name.to_string())
                     .percentiles(#percentiles_array)
                     .format(#format_token)
                     .build()
