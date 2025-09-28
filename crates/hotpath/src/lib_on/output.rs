@@ -79,7 +79,7 @@ pub trait Reporter {
 }
 
 #[allow(dead_code)]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum ProfilingMode {
     Timing,
@@ -89,7 +89,7 @@ pub enum ProfilingMode {
     AllocCountMax,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MetricsJson {
     pub hotpath_profiling_mode: ProfilingMode,
     pub total_elapsed: u64,
@@ -97,6 +97,7 @@ pub struct MetricsJson {
     pub output: MetricsDataJson,
 }
 
+#[derive(Debug, Clone)]
 pub struct MetricsDataJson {
     pub headers: Vec<String>,
     pub function_names: Vec<String>,
