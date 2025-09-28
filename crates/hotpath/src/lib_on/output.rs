@@ -12,7 +12,7 @@ use std::time::Duration;
 #[derive(Debug, Clone)]
 pub enum MetricType {
     CallsCount(u64), // Number of function calls
-    Timing(u64),     // Duration in nanoseconds
+    DurationNs(u64), // Duration in nanoseconds
     AllocBytes(u64), // Bytes allocated
     AllocCount(u64), // Allocation count
     Percentage(u64), // Percentage as basis points (1% = 100)
@@ -26,7 +26,7 @@ impl Serialize for MetricType {
     {
         match self {
             MetricType::CallsCount(count) => serializer.serialize_u64(*count),
-            MetricType::Timing(ns) => serializer.serialize_u64(*ns),
+            MetricType::DurationNs(ns) => serializer.serialize_u64(*ns),
             MetricType::AllocBytes(bytes) => serializer.serialize_u64(*bytes),
             MetricType::AllocCount(count) => serializer.serialize_u64(*count),
             MetricType::Percentage(basis_points) => serializer.serialize_u64(*basis_points),
@@ -41,7 +41,7 @@ impl fmt::Display for MetricType {
             MetricType::CallsCount(count) => {
                 write!(f, "{}", count)
             }
-            MetricType::Timing(ns) => {
+            MetricType::DurationNs(ns) => {
                 let duration = Duration::from_nanos(*ns);
                 write!(f, "{:.2?}", duration)
             }
@@ -235,7 +235,7 @@ fn create_metric_type(field_name: &str, value: u64, profiling_mode: &ProfilingMo
         // Percentiles
         name if name.starts_with('p') && name[1..].chars().all(|c| c.is_ascii_digit()) => {
             match profiling_mode {
-                ProfilingMode::Timing => MetricType::Timing(value),
+                ProfilingMode::Timing => MetricType::DurationNs(value),
                 ProfilingMode::AllocBytesTotal | ProfilingMode::AllocBytesMax => {
                     MetricType::AllocBytes(value)
                 }
@@ -245,7 +245,7 @@ fn create_metric_type(field_name: &str, value: u64, profiling_mode: &ProfilingMo
             }
         }
         "avg" | "total" => match profiling_mode {
-            ProfilingMode::Timing => MetricType::Timing(value),
+            ProfilingMode::Timing => MetricType::DurationNs(value),
             ProfilingMode::AllocBytesTotal | ProfilingMode::AllocBytesMax => {
                 MetricType::AllocBytes(value)
             }
@@ -591,11 +591,11 @@ mod tests {
 
         // Verify that timing mode creates Timing MetricTypes for avg, p95, total
         let first_row = &metrics.output.rows[0];
-        assert!(matches!(first_row[0], MetricType::Timing(_))); // avg
+        assert!(matches!(first_row[0], MetricType::DurationNs(_))); // avg
         assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
-        assert!(matches!(first_row[2], MetricType::Timing(_))); // p95
+        assert!(matches!(first_row[2], MetricType::DurationNs(_))); // p95
         assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
-        assert!(matches!(first_row[4], MetricType::Timing(_))); // total
+        assert!(matches!(first_row[4], MetricType::DurationNs(_))); // total
     }
 
     #[test]

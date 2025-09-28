@@ -55,15 +55,15 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
 
                 let mut metrics = vec![
                     MetricType::CallsCount(stats.count),
-                    MetricType::Timing(stats.avg_duration_ns()),
+                    MetricType::DurationNs(stats.avg_duration_ns()),
                 ];
 
                 for p in self.percentiles.iter() {
                     let value = stats.percentile(*p as f64);
-                    metrics.push(MetricType::Timing(value.as_nanos() as u64));
+                    metrics.push(MetricType::DurationNs(value.as_nanos() as u64));
                 }
 
-                metrics.push(MetricType::Timing(stats.total_duration_ns));
+                metrics.push(MetricType::DurationNs(stats.total_duration_ns));
                 metrics.push(MetricType::Percentage((percentage * 100.0) as u64));
 
                 (short_name, metrics)
