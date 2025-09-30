@@ -20,6 +20,78 @@ impl Format {
     }
 }
 
+/// Initializes the hotpath profiling system and generates a performance report on program exit.
+///
+/// This attribute macro must be applied to your program's main function to enable profiling.
+/// It creates a guard that initializes the background measurement processing thread and
+/// automatically displays a performance summary when the program exits.
+///
+/// # Parameters
+///
+/// * `percentiles` - Array of percentile values (0-100) to display in the report. Default: `[95]`
+/// * `format` - Output format as a string: `"table"` (default), `"json"`, or `"json-pretty"`
+///
+/// # Examples
+///
+/// Basic usage with default settings (P95 percentile, table format):
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::main)]
+/// fn main() {
+///     // Your code here
+/// }
+/// ```
+///
+/// Custom percentiles:
+///
+/// ```rust,no_run
+/// #[tokio::main]
+/// #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 95, 99]))]
+/// async fn main() {
+///     // Your code here
+/// }
+/// ```
+///
+/// JSON output format:
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::main(format = "json-pretty"))]
+/// fn main() {
+///     // Your code here
+/// }
+/// ```
+///
+/// Combined parameters:
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 99], format = "json"))]
+/// fn main() {
+///     // Your code here
+/// }
+/// ```
+///
+/// # Usage with Tokio
+///
+/// When using with tokio, place `#[tokio::main]` before `#[hotpath::main]`:
+///
+/// ```rust,no_run
+/// #[tokio::main]
+/// #[cfg_attr(feature = "hotpath", hotpath::main)]
+/// async fn main() {
+///     // Your code here
+/// }
+/// ```
+///
+/// # Limitations
+///
+/// Only one hotpath guard can be active at a time. Creating a second guard (either via this
+/// macro or via [`GuardBuilder`](../hotpath/struct.GuardBuilder.html)) will cause a panic.
+///
+/// # See Also
+///
+/// * [`measure`](macro@measure) - Attribute macro for instrumenting functions
+/// * [`measure_block!`](../hotpath/macro.measure_block.html) - Macro for measuring code blocks
+/// * [`GuardBuilder`](../hotpath/struct.GuardBuilder.html) - Manual control over profiling lifecycle
 #[proc_macro_attribute]
 pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
@@ -108,6 +180,46 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Instruments a function to send performance measurements to the hotpath profiler.
+///
+/// This attribute macro wraps functions with profiling code that measures execution time
+/// or memory allocations (depending on enabled feature flags). The measurements are sent
+/// to a background processing thread for aggregation.
+///
+/// # Behavior
+///
+/// The macro automatically detects whether the function is sync or async and instruments
+/// it appropriately. Measurements include:
+///
+/// * **Time profiling** (default): Execution duration using high-precision timers
+/// * **Allocation profiling**: Memory allocations when allocation features are enabled
+///   - `hotpath-alloc-bytes-total` - Total bytes allocated
+///   - `hotpath-alloc-bytes-max` - Peak memory usage
+///   - `hotpath-alloc-count-total` - Total allocation count
+///   - `hotpath-alloc-count-max` - Peak allocation count
+///
+/// # Async Function Limitations
+///
+/// When using allocation profiling features with async functions, you must use the
+/// `tokio` runtime in `current_thread` mode:
+///
+/// ```rust,no_run
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() {
+///     // Your async code here
+/// }
+/// ```
+///
+/// This limitation exists because allocation tracking uses thread-local storage. In multi-threaded
+/// runtimes, async tasks can migrate between threads, making it impossible to accurately
+/// attribute allocations to specific function calls. Time-based profiling works with any runtime flavor.
+///
+/// When the `hotpath` feature is disabled, this macro compiles to zero overhead (no instrumentation).
+///
+/// # See Also
+///
+/// * [`main`](macro@main) - Attribute macro that initializes profiling
+/// * [`measure_block!`](../hotpath/macro.measure_block.html) - Macro for measuring code blocks
 #[proc_macro_attribute]
 pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);

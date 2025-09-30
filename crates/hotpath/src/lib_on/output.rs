@@ -9,6 +9,34 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
+/// Represents different types of profiling metrics with their values.
+///
+/// This enum wraps metric values with type information, allowing the reporting
+/// system to format and display them appropriately. Values are stored in their
+/// raw form and formatted when displayed.
+///
+/// # Variants
+///
+/// * `CallsCount(u64)` - Number of function calls
+/// * `DurationNs(u64)` - Duration in nanoseconds (formatted as human-readable time)
+/// * `AllocBytes(u64)` - Bytes allocated (formatted with KB/MB/GB units)
+/// * `AllocCount(u64)` - Allocation count
+/// * `Percentage(u64)` - Percentage as basis points (1% = 100, formatted as percentage)
+/// * `Unsupported` - For N/A values (e.g., async functions when allocation profiling not supported)
+///
+/// # Examples
+///
+/// ```rust
+/// use hotpath::MetricType;
+///
+/// let duration = MetricType::DurationNs(1_500_000); // 1.5ms
+/// let memory = MetricType::AllocBytes(2048); // 2KB
+/// let percent = MetricType::Percentage(9500); // 95.00%
+///
+/// println!("{}", duration); // Displays: "1.50ms"
+/// println!("{}", memory);   // Displays: "2.0 KB"
+/// println!("{}", percent);  // Displays: "95.00%"
+/// ```
 #[derive(Debug, Clone)]
 pub enum MetricType {
     CallsCount(u64), // Number of function calls
@@ -80,7 +108,7 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-pub fn format_function_name(function_name: &str) -> String {
+pub(crate) fn format_function_name(function_name: &str) -> String {
     let parts: Vec<&str> = function_name.split("::").collect();
     if parts.len() > 2 {
         parts[parts.len() - 2..].join("::")
@@ -89,6 +117,33 @@ pub fn format_function_name(function_name: &str) -> String {
     }
 }
 
+/// Trait for implementing custom profiling report output.
+///
+/// Implement this trait to control how profiling results are displayed or stored.
+/// Custom reporters can integrate hotpath with logging systems, CI pipelines,
+/// monitoring tools, or custom file formats.
+///
+/// # Examples
+///
+/// ```rust
+/// use hotpath::{Reporter, MetricsProvider};
+/// use std::error::Error;
+///
+/// struct SimpleLogger;
+///
+/// impl Reporter for SimpleLogger {
+///     fn report(&self, metrics: &dyn MetricsProvider<'_>) -> Result<(), Box<dyn Error>> {
+///         println!("Profiling {} complete", metrics.caller_name());
+///         println!("Functions measured: {}", metrics.metric_data().len());
+///         Ok(())
+///     }
+/// }
+/// ```
+///
+/// # See Also
+///
+/// * [`MetricsProvider`] - Trait for accessing profiling metrics data
+/// * [`GuardBuilder::reporter`](crate::GuardBuilder::reporter) - Method to set custom reporter
 pub trait Reporter {
     fn report(
         &self,
@@ -96,6 +151,18 @@ pub trait Reporter {
     ) -> Result<(), Box<dyn std::error::Error>>;
 }
 
+/// Profiling mode indicating what type of measurements were collected.
+///
+/// This enum identifies which profiling feature was active when measurements
+/// were collected. It's included in JSON output to help interpret the metrics.
+///
+/// # Variants
+///
+/// * `Timing` - Time-based profiling (execution duration)
+/// * `AllocBytesTotal` - Total bytes allocated per function call
+/// * `AllocBytesMax` - Peak memory usage per function call
+/// * `AllocCountTotal` - Total allocation count per function call
+/// * `AllocCountMax` - Peak allocation count per function call
 #[allow(dead_code)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
@@ -107,6 +174,7 @@ pub enum ProfilingMode {
     AllocCountMax,
 }
 
+/// JSON representation of profiling metrics.
 #[derive(Serialize, Debug, Clone)]
 pub struct MetricsJson {
     pub hotpath_profiling_mode: ProfilingMode,
@@ -149,6 +217,7 @@ impl<'de> Deserialize<'de> for MetricsJson {
     }
 }
 
+/// Structured per-function profiling metrics data.
 #[derive(Debug, Clone)]
 pub struct MetricsDataJson {
     pub headers: Vec<String>,
@@ -391,6 +460,37 @@ pub(crate) fn get_sorted_entries(
     sorted_entries
 }
 
+/// Trait for accessing profiling metrics data from custom reporters.
+///
+/// This trait provides a standardized interface for reporters to access profiling
+/// metrics, regardless of the underlying profiling mode (time or allocation tracking).
+/// Implement [`Reporter`] to use this interface for custom output.
+///
+/// # Examples
+///
+/// ```rust
+/// use hotpath::{Reporter, MetricsProvider};
+/// use std::error::Error;
+///
+/// struct CustomReporter;
+///
+/// impl Reporter for CustomReporter {
+///     fn report(&self, metrics: &dyn MetricsProvider<'_>) -> Result<(), Box<dyn Error>> {
+///         println!("=== {} ===", metrics.description());
+///
+///         for (func_name, metric_values) in metrics.metric_data() {
+///             println!("{}: {} values", func_name, metric_values.len());
+///         }
+///
+///         Ok(())
+///     }
+/// }
+/// ```
+///
+/// # See Also
+///
+/// * [`Reporter`] - Trait for implementing custom reporters
+/// * [`MetricType`] - Metric value types
 pub trait MetricsProvider<'a> {
     fn description(&self) -> String;
     fn headers(&self) -> Vec<String> {
@@ -440,7 +540,7 @@ pub trait MetricsProvider<'a> {
     fn caller_name(&self) -> &str;
 }
 
-pub fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
+fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
     let title = format!(
         "\n{} No measurements recorded from {} (Total time: {:.2?})",
         "[hotpath]".blue().bold(),
