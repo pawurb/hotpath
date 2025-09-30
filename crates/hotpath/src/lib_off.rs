@@ -45,3 +45,6 @@ impl GuardBuilder {
         HotPath
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct FunctionStats {}

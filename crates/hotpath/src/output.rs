@@ -1,4 +1,4 @@
-use super::FunctionStats;
+use crate::FunctionStats;
 use colored::*;
 use prettytable::{color, Attr, Cell, Row, Table};
 use serde::{
@@ -174,19 +174,34 @@ pub enum ProfilingMode {
     AllocCountMax,
 }
 
+impl fmt::Display for ProfilingMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProfilingMode::Timing => write!(f, "timing"),
+            ProfilingMode::AllocBytesTotal => write!(f, "alloc_bytes_total"),
+            ProfilingMode::AllocBytesMax => write!(f, "alloc_bytes_max"),
+            ProfilingMode::AllocCountTotal => write!(f, "alloc_count_total"),
+            ProfilingMode::AllocCountMax => write!(f, "alloc_count_max"),
+        }
+    }
+}
+
 /// JSON representation of profiling metrics.
-#[derive(Serialize, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct MetricsJson {
     pub hotpath_profiling_mode: ProfilingMode,
     pub total_elapsed: u64,
+    pub description: String,
     pub caller_name: String,
-    pub output: MetricsDataJson,
+    pub percentiles: Vec<u8>,
+    pub data: MetricsDataJson,
 }
 
 #[derive(Deserialize)]
 struct MetricsJsonRaw {
     hotpath_profiling_mode: ProfilingMode,
     total_elapsed: u64,
+    description: String,
     caller_name: String,
     output: serde_json::Value,
 }
@@ -195,14 +210,23 @@ impl TryFrom<MetricsJsonRaw> for MetricsJson {
     type Error = serde::de::value::Error;
 
     fn try_from(raw: MetricsJsonRaw) -> Result<Self, Self::Error> {
-        let output =
-            MetricsDataJson::deserialize_with_mode(raw.output, &raw.hotpath_profiling_mode)
-                .map_err(serde::de::Error::custom)?;
+        let percentiles =
+            extract_percentiles_from_json(&raw.output).map_err(serde::de::Error::custom)?;
+
+        let output = MetricsDataJson::deserialize_with_mode(
+            raw.output,
+            &raw.hotpath_profiling_mode,
+            &percentiles,
+        )
+        .map_err(serde::de::Error::custom)?;
+
         Ok(MetricsJson {
             hotpath_profiling_mode: raw.hotpath_profiling_mode,
             total_elapsed: raw.total_elapsed,
+            description: raw.description,
             caller_name: raw.caller_name,
-            output,
+            percentiles,
+            data: output,
         })
     }
 }
@@ -219,33 +243,102 @@ impl<'de> Deserialize<'de> for MetricsJson {
 
 /// Structured per-function profiling metrics data.
 #[derive(Debug, Clone)]
-pub struct MetricsDataJson {
-    pub headers: Vec<String>,
-    pub function_names: Vec<String>,
-    pub rows: Vec<Vec<MetricType>>,
+pub struct MetricsDataJson(pub HashMap<String, Vec<MetricType>>);
+
+fn build_headers(percentiles: &[u8]) -> Vec<String> {
+    let mut headers = vec![
+        "Function".to_string(),
+        "Calls".to_string(),
+        "Avg".to_string(),
+    ];
+
+    for &p in percentiles {
+        headers.push(format!("P{}", p));
+    }
+
+    headers.push("Total".to_string());
+    headers.push("% Total".to_string());
+
+    headers
 }
 
-impl Serialize for MetricsDataJson {
+struct MetricsDataSerializer<'a> {
+    data: &'a HashMap<String, Vec<MetricType>>,
+    headers: &'a [String],
+}
+
+impl<'a> Serialize for MetricsDataSerializer<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        let mut map = serializer.serialize_map(Some(self.rows.len()))?;
+        let mut map = serializer.serialize_map(Some(self.data.len()))?;
 
-        for (i, row) in self.rows.iter().enumerate() {
-            if i < self.function_names.len() {
-                let function_name = &self.function_names[i];
+        for (function_name, row) in self.data {
+            let function_serializer = FunctionDataSerializer {
+                headers: self.headers,
+                row,
+            };
 
-                let function_serializer = FunctionDataSerializer {
-                    headers: &self.headers,
-                    row,
-                };
-
-                map.serialize_entry(function_name, &function_serializer)?;
-            }
+            map.serialize_entry(function_name, &function_serializer)?;
         }
 
         map.end()
+    }
+}
+
+impl Serialize for MetricsJson {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let headers = build_headers(&self.percentiles);
+        let mut state = serializer.serialize_struct("MetricsJson", 5)?;
+
+        state.serialize_field("hotpath_profiling_mode", &self.hotpath_profiling_mode)?;
+        state.serialize_field("total_elapsed", &self.total_elapsed)?;
+        state.serialize_field("description", &self.description)?;
+        state.serialize_field("caller_name", &self.caller_name)?;
+
+        let output_serializer = MetricsDataSerializer {
+            data: &self.data.0,
+            headers: &headers,
+        };
+        state.serialize_field("output", &output_serializer)?;
+
+        state.end()
+    }
+}
+
+fn extract_percentiles_from_json(
+    value: &serde_json::Value,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let map = value
+        .as_object()
+        .ok_or("Expected object for output field")?;
+
+    if let Some((_, first_function)) = map.iter().next() {
+        let function_obj = first_function
+            .as_object()
+            .ok_or("Expected object for function data")?;
+
+        let mut percentiles: Vec<u8> = function_obj
+            .keys()
+            .filter_map(|key| {
+                if key.starts_with('p') && key[1..].chars().all(|c| c.is_ascii_digit()) {
+                    key[1..].parse::<u8>().ok()
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        percentiles.sort_unstable();
+        Ok(percentiles)
+    } else {
+        Ok(Vec::new())
     }
 }
 
@@ -253,47 +346,38 @@ impl MetricsDataJson {
     pub fn deserialize_with_mode(
         value: serde_json::Value,
         profiling_mode: &ProfilingMode,
+        percentiles: &[u8],
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let map = value
             .as_object()
             .ok_or("Expected object for output field")?;
 
-        let mut function_names = Vec::new();
-        let mut rows = Vec::new();
-        let mut headers = Vec::new();
+        let headers = build_headers(percentiles);
+        let mut data = HashMap::new();
 
-        let mut first_entry = true;
         for (function_name, function_data) in map {
-            function_names.push(function_name.clone());
-
             let function_obj = function_data
                 .as_object()
                 .ok_or("Expected object for function data")?;
 
-            if first_entry {
-                headers.push("Function".to_string());
-                let mut metric_headers: Vec<String> = function_obj.keys().cloned().collect();
-                metric_headers.sort();
-                headers.extend(metric_headers.iter().cloned());
-                first_entry = false;
-            }
-
             let mut row = Vec::new();
             for header in headers.iter().skip(1) {
-                if let Some(value) = function_obj.get(header) {
+                // Convert header to JSON key format (lowercase, replace spaces and %)
+                let key = header
+                    .to_lowercase()
+                    .replace(' ', "_")
+                    .replace('%', "percent");
+
+                if let Some(value) = function_obj.get(&key) {
                     let value_u64 = value.as_u64().ok_or("Expected u64 value")?;
-                    let metric_type = create_metric_type(header, value_u64, profiling_mode);
+                    let metric_type = create_metric_type(&key, value_u64, profiling_mode);
                     row.push(metric_type);
                 }
             }
-            rows.push(row);
+            data.insert(function_name.clone(), row);
         }
 
-        Ok(MetricsDataJson {
-            headers,
-            function_names,
-            rows,
-        })
+        Ok(MetricsDataJson(data))
     }
 }
 
@@ -355,20 +439,18 @@ impl<'a> Serialize for FunctionDataSerializer<'a> {
 impl From<&dyn MetricsProvider<'_>> for MetricsJson {
     fn from(metrics: &dyn MetricsProvider<'_>) -> Self {
         let hotpath_profiling_mode = Self::determine_profiling_mode();
+        let percentiles = metrics.percentiles();
 
         let sorted_entries = get_sorted_entries(metrics);
-        let (function_names, rows): (Vec<String>, Vec<Vec<MetricType>>) =
-            sorted_entries.into_iter().unzip();
+        let data: HashMap<String, Vec<MetricType>> = sorted_entries.into_iter().collect();
 
         Self {
             hotpath_profiling_mode,
             total_elapsed: metrics.total_elapsed(),
+            description: metrics.description(),
             caller_name: metrics.caller_name().to_string(),
-            output: MetricsDataJson {
-                headers: metrics.headers(),
-                function_names,
-                rows,
-            },
+            percentiles,
+            data: MetricsDataJson(data),
         }
     }
 }
@@ -426,7 +508,16 @@ pub(crate) fn display_table(metrics_provider: &dyn MetricsProvider<'_>) {
         table.add_row(Row::new(row_cells));
     }
 
-    println!("{}", metrics_provider.description());
+    println!(
+        "{} {}",
+        "[hotpath]".blue().bold(),
+        metrics_provider.description()
+    );
+    println!(
+        "Total time: {:.2?}",
+        Duration::from_nanos(metrics_provider.total_elapsed())
+    );
+    println!("Caller: {}", metrics_provider.caller_name());
     table.printstd();
 
     if metrics_provider.has_unsupported_async() {
@@ -640,6 +731,7 @@ mod tests {
             "hotpath_profiling_mode": "timing",
             "total_elapsed": 125189584,
             "caller_name": "basic::main",
+            "description": "Time metrics",
             "output": {
                 "basic::async_function": {
                     "calls": 100,
@@ -674,27 +766,18 @@ mod tests {
         ));
         assert_eq!(metrics.total_elapsed, 125189584);
         assert_eq!(metrics.caller_name, "basic::main");
-        assert_eq!(metrics.output.function_names.len(), 3);
-        assert!(metrics
-            .output
-            .function_names
-            .contains(&"basic::async_function".to_string()));
-        assert!(metrics
-            .output
-            .function_names
-            .contains(&"basic::sync_function".to_string()));
-        assert!(metrics
-            .output
-            .function_names
-            .contains(&"custom_block".to_string()));
+        assert_eq!(metrics.data.0.len(), 3);
+        assert!(metrics.data.0.contains_key("basic::async_function"));
+        assert!(metrics.data.0.contains_key("basic::sync_function"));
+        assert!(metrics.data.0.contains_key("custom_block"));
 
         // Verify that timing mode creates Timing MetricTypes for avg, p95, total
-        let first_row = &metrics.output.rows[0];
-        assert!(matches!(first_row[0], MetricType::DurationNs(_))); // avg
-        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        let first_row = metrics.data.0.values().next().unwrap();
+        assert!(matches!(first_row[0], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[1], MetricType::DurationNs(_))); // avg
         assert!(matches!(first_row[2], MetricType::DurationNs(_))); // p95
-        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
-        assert!(matches!(first_row[4], MetricType::DurationNs(_))); // total
+        assert!(matches!(first_row[3], MetricType::DurationNs(_))); // total
+        assert!(matches!(first_row[4], MetricType::Percentage(_))); // percent_total
     }
 
     #[test]
@@ -703,6 +786,7 @@ mod tests {
             "hotpath_profiling_mode": "alloc-count-max",
             "total_elapsed": 123848875,
             "caller_name": "basic::main",
+            "description": "Peak allocation count",
             "output": {
                 "custom_block": {
                     "calls": 100,
@@ -737,26 +821,17 @@ mod tests {
         ));
         assert_eq!(metrics.total_elapsed, 123848875);
         assert_eq!(metrics.caller_name, "basic::main");
-        assert_eq!(metrics.output.function_names.len(), 3);
-        assert!(metrics
-            .output
-            .function_names
-            .contains(&"custom_block".to_string()));
-        assert!(metrics
-            .output
-            .function_names
-            .contains(&"basic::sync_function".to_string()));
-        assert!(metrics
-            .output
-            .function_names
-            .contains(&"basic::async_function".to_string()));
+        assert_eq!(metrics.data.0.len(), 3);
+        assert!(metrics.data.0.contains_key("custom_block"));
+        assert!(metrics.data.0.contains_key("basic::sync_function"));
+        assert!(metrics.data.0.contains_key("basic::async_function"));
 
-        let first_row = &metrics.output.rows[0];
-        assert!(matches!(first_row[0], MetricType::AllocCount(_))); // avg
-        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        let first_row = metrics.data.0.values().next().unwrap();
+        assert!(matches!(first_row[0], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[1], MetricType::AllocCount(_))); // avg
         assert!(matches!(first_row[2], MetricType::AllocCount(_))); // p95
-        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
-        assert!(matches!(first_row[4], MetricType::AllocCount(_))); // total
+        assert!(matches!(first_row[3], MetricType::AllocCount(_))); // total
+        assert!(matches!(first_row[4], MetricType::Percentage(_))); // percent_total
     }
 
     #[test]
@@ -765,6 +840,7 @@ mod tests {
             "hotpath_profiling_mode": "alloc-count-total",
             "total_elapsed": 123762083,
             "caller_name": "basic::main",
+            "description": "Total allocation count",
             "output": {
                 "basic::sync_function": {
                     "calls": 100,
@@ -799,14 +875,14 @@ mod tests {
         ));
         assert_eq!(metrics.total_elapsed, 123762083);
         assert_eq!(metrics.caller_name, "basic::main");
-        assert_eq!(metrics.output.function_names.len(), 3);
+        assert_eq!(metrics.data.0.len(), 3);
 
-        let first_row = &metrics.output.rows[0];
-        assert!(matches!(first_row[0], MetricType::AllocCount(_))); // avg
-        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        let first_row = metrics.data.0.values().next().unwrap();
+        assert!(matches!(first_row[0], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[1], MetricType::AllocCount(_))); // avg
         assert!(matches!(first_row[2], MetricType::AllocCount(_))); // p95
-        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
-        assert!(matches!(first_row[4], MetricType::AllocCount(_))); // total
+        assert!(matches!(first_row[3], MetricType::AllocCount(_))); // total
+        assert!(matches!(first_row[4], MetricType::Percentage(_))); // percent_total
     }
 
     #[test]
@@ -815,6 +891,7 @@ mod tests {
             "hotpath_profiling_mode": "alloc-bytes-max",
             "total_elapsed": 119932458,
             "caller_name": "basic::main",
+            "description": "Time metrics",
             "output": {
                 "custom_block": {
                     "calls": 100,
@@ -849,14 +926,14 @@ mod tests {
         ));
         assert_eq!(metrics.total_elapsed, 119932458);
         assert_eq!(metrics.caller_name, "basic::main");
-        assert_eq!(metrics.output.function_names.len(), 3);
+        assert_eq!(metrics.data.0.len(), 3);
 
-        let first_row = &metrics.output.rows[0];
-        assert!(matches!(first_row[0], MetricType::AllocBytes(_))); // avg
-        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        let first_row = metrics.data.0.values().next().unwrap();
+        assert!(matches!(first_row[0], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[1], MetricType::AllocBytes(_))); // avg
         assert!(matches!(first_row[2], MetricType::AllocBytes(_))); // p95
-        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
-        assert!(matches!(first_row[4], MetricType::AllocBytes(_))); // total
+        assert!(matches!(first_row[3], MetricType::AllocBytes(_))); // total
+        assert!(matches!(first_row[4], MetricType::Percentage(_))); // percent_total
     }
 
     #[test]
@@ -865,6 +942,7 @@ mod tests {
             "hotpath_profiling_mode": "alloc-bytes-total",
             "total_elapsed": 121738041,
             "caller_name": "basic::main",
+            "description": "Bytes allocated",
             "output": {
                 "custom_block": {
                     "calls": 100,
@@ -899,14 +977,14 @@ mod tests {
         ));
         assert_eq!(metrics.total_elapsed, 121738041);
         assert_eq!(metrics.caller_name, "basic::main");
-        assert_eq!(metrics.output.function_names.len(), 3);
+        assert_eq!(metrics.data.0.len(), 3);
 
-        let first_row = &metrics.output.rows[0];
-        assert!(matches!(first_row[0], MetricType::AllocBytes(_))); // avg
-        assert!(matches!(first_row[1], MetricType::CallsCount(_))); // calls
+        let first_row = metrics.data.0.values().next().unwrap();
+        assert!(matches!(first_row[0], MetricType::CallsCount(_))); // calls
+        assert!(matches!(first_row[1], MetricType::AllocBytes(_))); // avg
         assert!(matches!(first_row[2], MetricType::AllocBytes(_))); // p95
-        assert!(matches!(first_row[3], MetricType::Percentage(_))); // percent_total
-        assert!(matches!(first_row[4], MetricType::AllocBytes(_))); // total
+        assert!(matches!(first_row[3], MetricType::AllocBytes(_))); // total
+        assert!(matches!(first_row[4], MetricType::Percentage(_))); // percent_total
     }
 
     use serde_json::Value;
@@ -917,6 +995,7 @@ mod tests {
             "hotpath_profiling_mode": "timing",
             "total_elapsed": 125189584,
             "caller_name": "basic::main",
+            "description": "Time metrics",
             "output": {
                 "basic::async_function": {
                     "calls": 100,
@@ -943,6 +1022,7 @@ mod tests {
             "hotpath_profiling_mode": "timing",
             "total_elapsed": 125189584,
             "caller_name": "basic::main",
+            "description": "Time metrics",
             "output": {
                 "test_function": {
                     "calls": 42,
@@ -957,21 +1037,11 @@ mod tests {
         let metrics: MetricsJson = serde_json::from_str(json_str).expect("Failed to deserialize");
 
         // Verify that the internal structure is correctly parsed
-        assert_eq!(metrics.output.headers.len(), 6); // Function, calls, avg, p95, total, percent_total
-        assert_eq!(metrics.output.headers[0], "Function");
-        assert!(metrics.output.headers.contains(&"calls".to_string()));
-        assert!(metrics.output.headers.contains(&"avg".to_string()));
-        assert!(metrics.output.headers.contains(&"p95".to_string()));
-        assert!(metrics.output.headers.contains(&"total".to_string()));
-        assert!(metrics
-            .output
-            .headers
-            .contains(&"percent_total".to_string()));
+        assert_eq!(metrics.percentiles, vec![95]);
+        assert_eq!(metrics.data.0.len(), 1);
+        assert!(metrics.data.0.contains_key("test_function"));
 
-        assert_eq!(metrics.output.function_names.len(), 1);
-        assert_eq!(metrics.output.function_names[0], "test_function");
-
-        assert_eq!(metrics.output.rows.len(), 1);
-        assert_eq!(metrics.output.rows[0].len(), 5); // All metrics except function name
+        let row = &metrics.data.0["test_function"];
+        assert_eq!(row.len(), 5); // calls, avg, p95, total, percent_total
     }
 }

@@ -19,6 +19,7 @@ hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
 hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
 hotpath-alloc-count-max = ["hotpath/hotpath-alloc-count-max"]
 hotpath-off = ["hotpath/hotpath-off"]
+hotpath-ci = ["hotpath/hotpath-ci"]
 
 [[example]]
 name = "basic"

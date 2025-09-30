@@ -1,4 +1,3 @@
-use colored::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -28,12 +27,8 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        format!(
-            "\n{} Max bytes allocation statistics from {} (Total time: {:.2?}):",
-            "[hotpath]".blue().bold(),
-            self.caller_name.yellow().bold(),
-            self.total_elapsed
-        )
+        "Peak memory usage (maximum bytes allocated at any point) during each function call."
+            .to_string()
     }
 
     fn percentiles(&self) -> Vec<u8> {

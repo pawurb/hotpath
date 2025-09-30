@@ -341,7 +341,7 @@ pub mod tests {
                 "-p",
                 "hotpath-test-all-features",
                 "--example",
-                "basic",
+                "basic_all_features",
                 "--all-features",
             ])
             .output()

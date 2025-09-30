@@ -1,9 +1,9 @@
+use crate::output;
+use crate::output::MetricsProvider;
+
 #[doc(hidden)]
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
-pub use output::{
-    MetricType, MetricsDataJson, MetricsJson, MetricsProvider, ProfilingMode, Reporter,
-};
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -29,7 +29,7 @@ cfg_if::cfg_if! {
         // Time-based profiling (when no allocation features are enabled)
         mod time;
         pub use time::guard::TimeGuard;
-        use time::state::FunctionStats;
+        pub use time::state::FunctionStats;
         use time::{
             report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
@@ -41,7 +41,7 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "hotpath-alloc-bytes-max")] {
         mod alloc_bytes_max;
         pub use alloc_bytes_max::guard::AllocGuard;
-        use alloc_bytes_max::state::FunctionStats;
+        pub use alloc_bytes_max::state::FunctionStats;
         use alloc_bytes_max::{
             report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
@@ -49,7 +49,7 @@ cfg_if::cfg_if! {
     } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
         mod alloc_bytes_total;
         pub use alloc_bytes_total::guard::AllocGuard;
-        use alloc_bytes_total::state::FunctionStats;
+        pub use alloc_bytes_total::state::FunctionStats;
         use alloc_bytes_total::{
             report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
@@ -57,7 +57,7 @@ cfg_if::cfg_if! {
     } else if #[cfg(feature = "hotpath-alloc-count-max")] {
         mod alloc_count_max;
         pub use alloc_count_max::guard::AllocGuard;
-        use alloc_count_max::state::FunctionStats;
+        pub use alloc_count_max::state::FunctionStats;
         use alloc_count_max::{
             report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
@@ -65,15 +65,13 @@ cfg_if::cfg_if! {
     } else if #[cfg(feature = "hotpath-alloc-count-total")] {
         mod alloc_count_total;
         pub use alloc_count_total::guard::AllocGuard;
-        use alloc_count_total::state::FunctionStats;
+        pub use alloc_count_total::state::FunctionStats;
         use alloc_count_total::{
             report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
     }
 }
-
-pub(crate) mod output;
 
 /// Output format for profiling reports.
 ///
@@ -179,6 +177,8 @@ use arc_swap::ArcSwapOption;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::RwLock;
+
+use crate::Reporter;
 
 #[cfg(all(
     feature = "hotpath-alloc-bytes-total",
@@ -444,7 +444,7 @@ impl GuardBuilder {
     }
 }
 
-fn init_hotpath(caller_name: String, percentiles: &[u8], reporter: Box<dyn Reporter>) -> HotPath {
+fn init_hotpath(caller_name: String, percentiles: &[u8], _reporter: Box<dyn Reporter>) -> HotPath {
     let percentiles = percentiles.to_vec();
 
     let arc_swap = HOTPATH_STATE.get_or_init(|| ArcSwapOption::from(None));
@@ -498,6 +498,13 @@ fn init_hotpath(caller_name: String, percentiles: &[u8], reporter: Box<dyn Repor
         .expect("Failed to spawn hotpath-worker thread");
 
     arc_swap.store(Some(Arc::clone(&state_arc)));
+
+    // Override reporter with JsonReporter when hotpath-ci feature is enabled
+    #[cfg(feature = "hotpath-ci")]
+    let reporter: Box<dyn Reporter> = Box::new(output::JsonReporter);
+
+    #[cfg(not(feature = "hotpath-ci"))]
+    let reporter = _reporter;
 
     HotPath {
         state: Arc::clone(&state_arc),

@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use super::super::output::{format_function_name, MetricType, MetricsProvider};
 use super::state::FunctionStats;
-use colored::*;
 
 pub struct StatsData<'a> {
     pub stats: &'a HashMap<&'static str, FunctionStats>,
@@ -32,12 +31,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        format!(
-            "\n{} Performance summary from {} (Total time: {:.2?}):",
-            "[hotpath]".blue().bold(),
-            self.caller_name.yellow().bold(),
-            self.total_elapsed
-        )
+        "Execution duration of functions.".to_string()
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {

@@ -1,4 +1,3 @@
-use colored::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -36,12 +35,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        format!(
-            "\n{} Total count allocation statistics from {} (Total time: {:.2?}):",
-            "[hotpath]".blue().bold(),
-            self.caller_name.yellow().bold(),
-            self.total_elapsed
-        )
+        "Total number of heap allocations performed during each function call.".to_string()
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {

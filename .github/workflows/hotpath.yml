@@ -1,0 +1,59 @@
+name: profile-on-pr
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  profile-on-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - id: head_timing_metrics
+        run: |
+          # Extract timing metrics from head branch
+          {
+            echo 'metrics<<EOF'
+            cargo run --example basic --features='hotpath,hotpath-ci' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - id: base_timing_metrics
+        run: |
+          # Extract timing metrics from base branch
+          # git checkout main
+          {
+            echo 'metrics<<EOF'
+            cargo run --example basic --features=hotpath -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          # git checkout -
+      - name: Install hotpath CLI
+        run: cargo install --path crates/hotpath
+      - name: Run hotpath CLI - timing mode
+        run: hotpath profile-pr --head-metrics '${{ steps.head_timing_metrics.outputs.metrics }}' --base-metrics '${{ steps.base_timing_metrics.outputs.metrics }}' --github-token '${{ github.token }}' --pr-number '${{ github.event.pull_request.number }}'
+      - id: head_alloc_metrics
+        run: |
+          # Extract alloc metrics from head branch
+          {
+            echo 'metrics<<EOF'
+            cargo run --example basic --features='hotpath,hotpath-alloc-count-max' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+      - id: base_alloc_metrics
+        run: |
+          # Extract alloc metrics from base branch
+          # git checkout main
+          {
+            echo 'metrics<<EOF'
+            cargo run --example basic --features='hotpath,hotpath-alloc-count-max' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+          # git checkout -
+      - name: Run hotpath CLI - alloc mode
+        run: hotpath profile-pr --head-metrics '${{ steps.head_alloc_metrics.outputs.metrics }}' --base-metrics '${{ steps.base_alloc_metrics.outputs.metrics }}' --github-token '${{ github.token }}' --pr-number '${{ github.event.pull_request.number }}'
