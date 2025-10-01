@@ -574,7 +574,7 @@ fn display_no_measurements_message(total_elapsed: Duration, caller_name: &str) {
     println!();
 }
 
-pub struct TableReporter;
+pub(crate) struct TableReporter;
 
 impl Reporter for TableReporter {
     fn report(
@@ -594,7 +594,7 @@ impl Reporter for TableReporter {
     }
 }
 
-pub struct JsonReporter;
+pub(crate) struct JsonReporter;
 
 impl Reporter for JsonReporter {
     fn report(
@@ -612,7 +612,7 @@ impl Reporter for JsonReporter {
     }
 }
 
-pub struct JsonPrettyReporter;
+pub(crate) struct JsonPrettyReporter;
 
 impl Reporter for JsonPrettyReporter {
     fn report(
@@ -633,7 +633,6 @@ impl Reporter for JsonPrettyReporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
 
     #[test]
     fn test_deserialize_timing_mode() {

@@ -20,6 +20,7 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
+#[doc(hidden)]
 pub struct NoopAsyncAllocGuard {
     name: &'static str,
 }

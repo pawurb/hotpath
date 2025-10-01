@@ -1,3 +1,4 @@
+#[doc(hidden)]
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure};
 pub use output::{
@@ -12,6 +13,7 @@ cfg_if::cfg_if! {
         feature = "hotpath-alloc-count-max"
     ))] {
         mod alloc;
+        #[doc(hidden)]
         pub use tokio::runtime::{Handle, RuntimeFlavor};
 
         // Memory allocations profiling using a custom global allocator
@@ -71,7 +73,7 @@ cfg_if::cfg_if! {
     }
 }
 
-pub mod output;
+pub(crate) mod output;
 
 /// Output format for profiling reports.
 ///
@@ -502,6 +504,7 @@ fn init_hotpath(caller_name: String, percentiles: &[u8], reporter: Box<dyn Repor
         reporter,
     }
 }
+
 pub struct HotPath {
     state: Arc<RwLock<HotPathState>>,
     reporter: Box<dyn Reporter>,

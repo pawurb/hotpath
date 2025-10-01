@@ -1,5 +1,6 @@
 use std::time::Instant;
 
+#[doc(hidden)]
 pub struct TimeGuard {
     name: &'static str,
     start: Instant,
