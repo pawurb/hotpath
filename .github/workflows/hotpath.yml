@@ -26,13 +26,13 @@ jobs:
       - id: base_timing_metrics
         run: |
           # Extract timing metrics from base branch
-          # git checkout main
+          git checkout main
           {
             echo 'metrics<<EOF'
             cargo run --example basic --features=hotpath -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
-          # git checkout -
+          git checkout -
       - name: Install hotpath CLI
         run: cargo install --path crates/hotpath
       - name: Run hotpath CLI - timing mode
@@ -48,12 +48,12 @@ jobs:
       - id: base_alloc_metrics
         run: |
           # Extract alloc metrics from base branch
-          # git checkout main
+          git checkout main
           {
             echo 'metrics<<EOF'
             cargo run --example basic --features='hotpath,hotpath-alloc-count-max' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
-          # git checkout -
+          git checkout -
       - name: Run hotpath CLI - alloc mode
         run: hotpath profile-pr --head-metrics '${{ steps.head_alloc_metrics.outputs.metrics }}' --base-metrics '${{ steps.base_alloc_metrics.outputs.metrics }}' --github-token '${{ github.token }}' --pr-number '${{ github.event.pull_request.number }}'
