@@ -8,21 +8,26 @@ on:
 
 jobs:
   build:
-    name: test ${{ matrix.rust }} 
+    name: test ${{ matrix.rust }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      matrix:
+        rust:
+          - 1.89
+          - stable
+          - nightly
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Set up Rust
-        run: | 
-          rustup update stable
-          rustup default stable
-          rustup component add rustfmt
-          rustup component add clippy
+        with:
+          key: ${{ matrix.rust }}
       - uses: taiki-e/install-action@cargo-audit
+        if: matrix.rust == 'stable'
       - name: Check no features
         run: | 
           cargo check 
@@ -47,25 +52,32 @@ jobs:
       - name: Check hotpath-alloc-count-max
         run: |
           cargo check --features "hotpath,hotpath-alloc-count-max"
-      - name: Fmt 
+      - name: Fmt
+        if: matrix.rust == 'stable'
         run: |
           cargo fmt --all --check
       - name: Lint (default features)
+        if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features hotpath -- -D warnings
       - name: Lint (hotpath-alloc-bytes-total)
+        if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features "hotpath,hotpath-alloc-bytes-total" -- -D warnings
-      - name: Lint (hotpath-alloc-bytes-max) 
+      - name: Lint (hotpath-alloc-bytes-max)
+        if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features "hotpath,hotpath-alloc-bytes-max" -- -D warnings
       - name: Lint (hotpath-alloc-count-total)
+        if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features "hotpath,hotpath-alloc-count-total" -- -D warnings
       - name: Lint (hotpath-alloc-count-max)
+        if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features "hotpath,hotpath-alloc-count-max" -- -D warnings
       - name: Audit
+        if: matrix.rust == 'stable'
         run: |
           cargo audit --ignore RUSTSEC-2023-0071
       - name: Run lib tests
