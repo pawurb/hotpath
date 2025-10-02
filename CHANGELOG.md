@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2025-10-02
+
+### 🚀 Features
+
+- Implement custom reporting
+- Add HotPathBuilder API
+- Add Deserialize for MetricsJson
+- Add Debug and Clone traits
+- Add hotpath CLI for GitHub CI integration
+
+### 🐛 Bug Fixes
+
+- Fix MetricType serialization
+- Improve MetricsJson deserializer
+- Fix hotpath CLI config
+
+### 🚜 Refactor
+
+- Remove unused cfg_if
+- Change metrics data structure, add JSON serializer
+- Rename HotpathBuilder to GuardBuilder
+- Rename MetricType
+
+### ⚙️ Miscellaneous Tasks
+
+- Test no op measure_block
+- Add docs, reduce pub exports
+- Improve docs, further reduce pub exports
+- Release v0.3.0
+
 ## [0.2.10] - 2025-09-25
 
 ### 🐛 Bug Fixes
