@@ -291,9 +291,9 @@ fn format_comparison_markdown(comparison: &MetricsComparison, metrics: &MetricsJ
 
     for func_diff in &comparison.function_diffs {
         let function_display = if func_diff.is_removed {
-            format!("️:wastebasket: {}", func_diff.function_name)
+            format!("️🗑️ {}", func_diff.function_name)
         } else if func_diff.is_new {
-            format!(":new: {}", func_diff.function_name)
+            format!("🆕 {}", func_diff.function_name)
         } else {
             func_diff.function_name.clone()
         };
