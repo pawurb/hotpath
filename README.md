@@ -28,9 +28,7 @@ hotpath = { version = "0.2", optional = true }
 [features]
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
 hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
-hotpath-alloc-bytes-max = ["hotpath/hotpath-alloc-bytes-max"]
 hotpath-alloc-count-total= ["hotpath/hotpath-alloc-count-total"]
-hotpath-alloc-count-max= ["hotpath/hotpath-alloc-count-max"]
 hotpath-off = ["hotpath/hotpath-off"]
 ```
 
@@ -100,14 +98,12 @@ In addition to time-based profiling, `hotpath` can track memory allocations. Thi
 Available alloc profiling modes:
 
 - `hotpath-alloc-bytes-total` - Tracks total bytes allocated during each function call
-- `hotpath-alloc-bytes-max` - Tracks peak memory usage during each function call
 - `hotpath-alloc-count-total` - Tracks total number of allocations per function call
-- `hotpath-alloc-count-max` - Tracks peak number of live allocations per function call
 
 Run your program with a selected flag to print a similar report:
 
 ```
-cargo run --features='hotpath,hotpath-alloc-bytes-max'
+cargo run --features='hotpath,hotpath-alloc-bytes-total'
 ```
 
 ![Alloc report](alloc-report.png)
@@ -119,9 +115,7 @@ To profile memory usage of `async` functions you have to use a similar config:
 ```rust
 #[cfg(any(
     feature = "hotpath-alloc-bytes-total",
-    feature = "hotpath-alloc-bytes-max",
     feature = "hotpath-alloc-count-total",
-    feature = "hotpath-alloc-count-max",
 ))]
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -130,9 +124,7 @@ async fn main() {
 
 #[cfg(not(any(
     feature = "hotpath-alloc-bytes-total",
-    feature = "hotpath-alloc-bytes-max",
     feature = "hotpath-alloc-count-total",
-    feature = "hotpath-alloc-count-max",
 )))]
 #[tokio::main]
 async fn main() {
@@ -356,6 +348,6 @@ hyperfine --warmup 3 './target/release/examples/benchmark'
 
 Allocations:
 ```
-cargo build --example benchmark --features='hotpath,hotpath-alloc-count-max' --release
+cargo build --example benchmark --features='hotpath,hotpath-alloc-count-total' --release
 hyperfine --warmup 3 './target/release/examples/benchmark'
 ```

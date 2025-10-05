@@ -43,15 +43,9 @@ jobs:
       - name: Check hotpath-alloc-bytes-total
         run: |
           cargo check --features "hotpath,hotpath-alloc-bytes-total"
-      - name: Check hotpath-alloc-bytes-max
-        run: |
-          cargo check --features "hotpath,hotpath-alloc-bytes-max"
       - name: Check hotpath-alloc-count-total
         run: |
           cargo check --features "hotpath,hotpath-alloc-count-total"
-      - name: Check hotpath-alloc-count-max
-        run: |
-          cargo check --features "hotpath,hotpath-alloc-count-max"
       - name: Fmt
         if: matrix.rust == 'stable'
         run: |
@@ -64,18 +58,10 @@ jobs:
         if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features "hotpath,hotpath-alloc-bytes-total" -- -D warnings
-      - name: Lint (hotpath-alloc-bytes-max)
-        if: matrix.rust == 'stable'
-        run: |
-          cargo clippy --all --features "hotpath,hotpath-alloc-bytes-max" -- -D warnings
       - name: Lint (hotpath-alloc-count-total)
         if: matrix.rust == 'stable'
         run: |
           cargo clippy --all --features "hotpath,hotpath-alloc-count-total" -- -D warnings
-      - name: Lint (hotpath-alloc-count-max)
-        if: matrix.rust == 'stable'
-        run: |
-          cargo clippy --all --features "hotpath,hotpath-alloc-count-max" -- -D warnings
       - name: Audit
         if: matrix.rust == 'stable'
         run: |

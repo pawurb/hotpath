@@ -8,9 +8,7 @@ pub use hotpath_macros::{main, measure};
 cfg_if::cfg_if! {
     if #[cfg(any(
         feature = "hotpath-alloc-bytes-total",
-        feature = "hotpath-alloc-bytes-max",
-        feature = "hotpath-alloc-count-total",
-        feature = "hotpath-alloc-count-max"
+        feature = "hotpath-alloc-count-total"
     ))] {
         mod alloc;
         #[doc(hidden)]
@@ -38,27 +36,11 @@ cfg_if::cfg_if! {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "hotpath-alloc-bytes-max")] {
-        mod alloc_bytes_max;
-        pub use alloc_bytes_max::guard::AllocGuard;
-        pub use alloc_bytes_max::state::FunctionStats;
-        use alloc_bytes_max::{
-            report::StatsData,
-            state::{HotPathState, Measurement, process_measurement},
-        };
-    } else if #[cfg(feature = "hotpath-alloc-bytes-total")] {
+    if #[cfg(feature = "hotpath-alloc-bytes-total")] {
         mod alloc_bytes_total;
         pub use alloc_bytes_total::guard::AllocGuard;
         pub use alloc_bytes_total::state::FunctionStats;
         use alloc_bytes_total::{
-            report::StatsData,
-            state::{HotPathState, Measurement, process_measurement},
-        };
-    } else if #[cfg(feature = "hotpath-alloc-count-max")] {
-        mod alloc_count_max;
-        pub use alloc_count_max::guard::AllocGuard;
-        pub use alloc_count_max::state::FunctionStats;
-        use alloc_count_max::{
             report::StatsData,
             state::{HotPathState, Measurement, process_measurement},
         };
@@ -151,9 +133,7 @@ macro_rules! measure_block {
         hotpath::cfg_if! {
             if #[cfg(any(
                 feature = "hotpath-alloc-bytes-total",
-                feature = "hotpath-alloc-bytes-max",
-                feature = "hotpath-alloc-count-total",
-                feature = "hotpath-alloc-count-max"
+                feature = "hotpath-alloc-count-total"
             ))] {
                 let _guard = hotpath::AllocGuard::new($label);
             } else {
@@ -182,26 +162,7 @@ use crate::Reporter;
 
 #[cfg(all(
     feature = "hotpath-alloc-bytes-total",
-    any(
-        feature = "hotpath-alloc-bytes-max",
-        feature = "hotpath-alloc-count-total",
-        feature = "hotpath-alloc-count-max"
-    )
-))]
-compile_error!("Only one allocation feature can be enabled at a time");
-
-#[cfg(all(
-    feature = "hotpath-alloc-bytes-max",
-    any(
-        feature = "hotpath-alloc-count-total",
-        feature = "hotpath-alloc-count-max"
-    )
-))]
-compile_error!("Only one allocation feature can be enabled at a time");
-
-#[cfg(all(
-    feature = "hotpath-alloc-count-total",
-    feature = "hotpath-alloc-count-max"
+    feature = "hotpath-alloc-count-total"
 ))]
 compile_error!("Only one allocation feature can be enabled at a time");
 

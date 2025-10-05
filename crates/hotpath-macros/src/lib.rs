@@ -185,9 +185,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                             // No-op when hotpath-off is enabled
                         } else if #[cfg(any(
                             feature = "hotpath-alloc-bytes-total",
-                            feature = "hotpath-alloc-bytes-max",
-                            feature = "hotpath-alloc-count-total",
-                            feature = "hotpath-alloc-count-max"
+                            feature = "hotpath-alloc-count-total"
                         ))] {
                             use hotpath::{Handle, RuntimeFlavor};
                             let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
@@ -230,9 +228,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         // No-op when hotpath-off is enabled
                     } else if #[cfg(any(
                         feature = "hotpath-alloc-bytes-total",
-                        feature = "hotpath-alloc-bytes-max",
-                        feature = "hotpath-alloc-count-total",
-                        feature = "hotpath-alloc-count-max"
+                        feature = "hotpath-alloc-count-total"
                     ))] {
                         let _measure_guard = hotpath::AllocGuard::new(#measurement_name);
                     } else {
@@ -262,9 +258,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// * **Time profiling** (default): Execution duration using high-precision timers
 /// * **Allocation profiling**: Memory allocations when allocation features are enabled
 ///   - `hotpath-alloc-bytes-total` - Total bytes allocated
-///   - `hotpath-alloc-bytes-max` - Peak memory usage
 ///   - `hotpath-alloc-count-total` - Total allocation count
-///   - `hotpath-alloc-count-max` - Peak allocation count
 ///
 /// # Async Function Limitations
 ///
@@ -307,9 +301,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
                             // No-op when hotpath-off is enabled
                         } else if #[cfg(any(
                             feature = "hotpath-alloc-bytes-total",
-                            feature = "hotpath-alloc-bytes-max",
-                            feature = "hotpath-alloc-count-total",
-                            feature = "hotpath-alloc-count-max"
+                            feature = "hotpath-alloc-count-total"
                         ))] {
                             use hotpath::{Handle, RuntimeFlavor};
                             let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
@@ -339,9 +331,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         // No-op when hotpath-off is enabled
                     } else if #[cfg(any(
                         feature = "hotpath-alloc-bytes-total",
-                        feature = "hotpath-alloc-bytes-max",
-                        feature = "hotpath-alloc-count-total",
-                        feature = "hotpath-alloc-count-max"
+                        feature = "hotpath-alloc-count-total"
                     ))] {
                         let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
                     } else {

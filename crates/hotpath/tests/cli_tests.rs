@@ -4,13 +4,7 @@ pub mod tests {
 
     #[test]
     fn test_basic_output() {
-        let features = [
-            "",
-            "hotpath-alloc-bytes-total",
-            "hotpath-alloc-bytes-max",
-            "hotpath-alloc-count-total",
-            "hotpath-alloc-count-max",
-        ];
+        let features = ["", "hotpath-alloc-bytes-total", "hotpath-alloc-count-total"];
 
         for feature in features {
             let features_arg = if feature.is_empty() {
@@ -61,9 +55,7 @@ pub mod tests {
         let features = [
             "hotpath",
             "hotpath-alloc-bytes-total",
-            "hotpath-alloc-bytes-max",
             "hotpath-alloc-count-total",
-            "hotpath-alloc-count-max",
         ];
         for feature in features {
             let features_arg = if feature == "hotpath" {
@@ -116,7 +108,7 @@ pub mod tests {
                 "--example",
                 "unsupported_async",
                 "--features",
-                "hotpath,hotpath-alloc-bytes-max",
+                "hotpath,hotpath-alloc-bytes-total",
             ])
             .output()
             .expect("Failed to execute command");
@@ -282,7 +274,7 @@ pub mod tests {
                 "--example",
                 "basic_smol",
                 "--features",
-                "hotpath,hotpath-alloc-bytes-max",
+                "hotpath,hotpath-alloc-bytes-total",
                 "--",
                 "--nocapture",
             ])

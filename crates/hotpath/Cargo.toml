@@ -16,9 +16,7 @@ path = "bin/main.rs"
 default = []
 hotpath = ["hotpath-macros/hotpath", "hotpath-macros/hotpath-off"]
 hotpath-alloc-bytes-total = ["dep:tokio"]
-hotpath-alloc-bytes-max = ["dep:tokio"]
 hotpath-alloc-count-total = ["dep:tokio"]
-hotpath-alloc-count-max = ["dep:tokio"]
 hotpath-off = []
 hotpath-ci = []
 
