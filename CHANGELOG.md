@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-10-05
+
+### 🚀 Features
+
+- Add wrapper logic for outer functions
+- Improve table display format
+
+### 🐛 Bug Fixes
+
+- Remove max allocation modes
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.4.0
+
 ## [0.3.1] - 2025-10-05
 
 ### 🚀 Features
