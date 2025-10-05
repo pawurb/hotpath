@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2025-10-05
+
+### 🚀 Features
+
+- Use emojis for outliers
+- Add measurement guard to main macro
+
+### 🐛 Bug Fixes
+
+- Fix GitHub emojis and CI config
+
+### ⚙️ Miscellaneous Tasks
+
+- Use multiple Rust versions in CI
+- Add unit test POC
+- Release v0.3.1
+
 ## [0.3.0] - 2025-10-02
 
 ### 🚀 Features
