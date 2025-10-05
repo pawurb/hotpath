@@ -20,6 +20,12 @@ pub struct ProfilePrArgs {
 
     #[arg(long, help = "Pull request number")]
     pr_number: String,
+
+    #[arg(
+        long,
+        help = "Emoji threshold percentage for performance changes (default: 20, use 0 to disable)"
+    )]
+    emoji_threshold: Option<u32>,
 }
 
 impl ProfilePrArgs {
@@ -31,12 +37,20 @@ impl ProfilePrArgs {
             return Ok(());
         }
 
+        // Convert emoji_threshold: None -> Some(20), Some(0) -> None
+        let emoji_threshold = if let Some(0) = self.emoji_threshold {
+            None
+        } else {
+            Some(self.emoji_threshold.unwrap_or(20))
+        };
+
         match post_pr_comment(
             &repo,
             &self.pr_number,
             &self.head_metrics,
             &self.base_metrics,
             &self.github_token,
+            emoji_threshold,
         ) {
             Ok(_) => println!("Successfully posted comment"),
             Err(e) => println!("Failed to post comment: {}", e),
@@ -57,40 +71,64 @@ pub enum MetricDiff {
 
 impl fmt::Display for MetricDiff {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.format_with_emoji(None))
+    }
+}
+
+impl MetricDiff {
+    fn format_with_emoji(&self, emoji_threshold: Option<u32>) -> String {
         match self {
             MetricDiff::CallsCount(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
-                write!(f, "{} → {} ({:+.1}%)", before, after, diff_percent)
+                let emoji = get_emoji_for_diff(diff_percent, emoji_threshold);
+                format!("{} → {} ({:+.1}%){}", before, after, diff_percent, emoji)
             }
             MetricDiff::DurationNs(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
                 let before_duration = Duration::from_nanos(*before);
                 let after_duration = Duration::from_nanos(*after);
-                write!(
-                    f,
-                    "{:.2?} → {:.2?} ({:+.1}%)",
-                    before_duration, after_duration, diff_percent
+                let emoji = get_emoji_for_diff(diff_percent, emoji_threshold);
+                format!(
+                    "{:.2?} → {:.2?} ({:+.1}%){}",
+                    before_duration, after_duration, diff_percent, emoji
                 )
             }
             MetricDiff::AllocBytes(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
-                write!(f, "{} → {} ({:+.1}%)", before, after, diff_percent)
+                let emoji = get_emoji_for_diff(diff_percent, emoji_threshold);
+                format!("{} → {} ({:+.1}%){}", before, after, diff_percent, emoji)
             }
             MetricDiff::AllocCount(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
-                write!(f, "{} → {} ({:+.1}%)", before, after, diff_percent)
+                let emoji = get_emoji_for_diff(diff_percent, emoji_threshold);
+                format!("{} → {} ({:+.1}%){}", before, after, diff_percent, emoji)
             }
             MetricDiff::Percentage(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
                 let before_percent = *before as f64 / 100.0;
                 let after_percent = *after as f64 / 100.0;
-                write!(
-                    f,
-                    "{:.2}% → {:.2}% ({:+.1}%)",
-                    before_percent, after_percent, diff_percent
+                let emoji = get_emoji_for_diff(diff_percent, emoji_threshold);
+                format!(
+                    "{:.2}% → {:.2}% ({:+.1}%){}",
+                    before_percent, after_percent, diff_percent, emoji
                 )
             }
         }
+    }
+}
+
+fn get_emoji_for_diff(diff_percent: f64, threshold: Option<u32>) -> &'static str {
+    if let Some(threshold_val) = threshold {
+        let threshold = threshold_val as f64;
+        if diff_percent > threshold {
+            " ⚠️ "
+        } else if diff_percent < -threshold {
+            " 🚀 "
+        } else {
+            "   "
+        }
+    } else {
+        ""
     }
 }
 
@@ -255,7 +293,11 @@ fn compare_metrics(before_metrics: &MetricsJson, after_metrics: &MetricsJson) ->
     }
 }
 
-fn format_comparison_markdown(comparison: &MetricsComparison, metrics: &MetricsJson) -> String {
+fn format_comparison_markdown(
+    comparison: &MetricsComparison,
+    metrics: &MetricsJson,
+    emoji_threshold: Option<u32>,
+) -> String {
     let mut markdown = String::new();
 
     let base_branch = env::var("GITHUB_BASE_REF").unwrap_or_else(|_| "before".to_string());
@@ -300,7 +342,7 @@ fn format_comparison_markdown(comparison: &MetricsComparison, metrics: &MetricsJ
 
         let mut row_cells = vec![Cell::new(&function_display)];
         for metric_diff in &func_diff.metrics {
-            row_cells.push(Cell::new(&metric_diff.to_string()));
+            row_cells.push(Cell::new(&metric_diff.format_with_emoji(emoji_threshold)));
         }
         table.add_row(Row::new(row_cells));
     }
@@ -321,6 +363,7 @@ fn post_pr_comment(
     pr_metrics: &str,
     main_metrics: &str,
     token: &str,
+    emoji_threshold: Option<u32>,
 ) -> Result<()> {
     let url = format!(
         "https://api.github.com/repos/{}/issues/{}/comments",
@@ -333,7 +376,8 @@ fn post_pr_comment(
         .map_err(|e| eyre::eyre!("Failed to deserialize main metrics: {}", e))?;
 
     let comparison = compare_metrics(&main_metrics_data, &pr_metrics_data);
-    let comparison_markdown = format_comparison_markdown(&comparison, &main_metrics_data);
+    let comparison_markdown =
+        format_comparison_markdown(&comparison, &main_metrics_data, emoji_threshold);
 
     let mut body = comparison_markdown;
     body.push_str("\n<details>\n<summary>📊 View Raw JSON Metrics</summary>\n\n");
@@ -477,7 +521,7 @@ mod test {
         }
 
         // Test markdown formatting
-        let markdown = format_comparison_markdown(&comparison, &main_metrics);
+        let markdown = format_comparison_markdown(&comparison, &main_metrics, Some(20));
         println!("\n=== Generated Markdown ===\n{}", markdown);
     }
 
@@ -553,7 +597,7 @@ mod test {
             }
         }
 
-        let markdown = format_comparison_markdown(&comparison, &main_metrics);
+        let markdown = format_comparison_markdown(&comparison, &main_metrics, Some(20));
         println!("\n=== Generated Markdown ===\n{}", markdown);
 
         assert!(comparison
@@ -634,7 +678,7 @@ mod test {
             }
         }
 
-        let markdown = format_comparison_markdown(&comparison, &main_metrics);
+        let markdown = format_comparison_markdown(&comparison, &main_metrics, Some(20));
         println!("\n=== Generated Markdown ===\n{}", markdown);
 
         assert!(comparison
@@ -725,7 +769,7 @@ mod test {
         }
 
         // Test markdown formatting
-        let markdown = format_comparison_markdown(&comparison, &main_metrics);
+        let markdown = format_comparison_markdown(&comparison, &main_metrics, Some(20));
         println!("\n=== Generated Markdown ===\n{}", markdown);
 
         // Verify we have both new and removed functions
