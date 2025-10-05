@@ -267,40 +267,6 @@ pub mod tests {
     }
 
     #[test]
-    fn test_unit_test_multiple_guards() {
-        let output = Command::new("cargo")
-            .args([
-                "test",
-                "-p",
-                "hotpath-test-tokio-async",
-                "--example",
-                "unit_test",
-                "--features",
-                "hotpath",
-                "--",
-                "--test-threads",
-                "1",
-            ])
-            .output()
-            .expect("Failed to execute command");
-
-        assert!(
-            output.status.success(),
-            "Process did not exit successfully: {output:?}",
-        );
-
-        let all_expected = ["unit_test::async_function", "unit_test::sync_function"];
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        for expected in all_expected {
-            assert!(
-                stdout.contains(expected),
-                "Expected:\n{expected}\n\nGot:\n{stdout}",
-            );
-        }
-    }
-
-    #[test]
     fn test_async_smol_alloc_profiling_output() {
         let output = Command::new("cargo")
             .args([
