@@ -1,7 +1,7 @@
 # hotpath - find and profile bottlenecks in Rust
 [![Latest Version](https://img.shields.io/crates/v/hotpath.svg)](https://crates.io/crates/hotpath) [![GH Actions](https://github.com/pawurb/hotpath/actions/workflows/ci.yml/badge.svg)](https://github.com/pawurb/hotpath/actions)
 
-[![Profiling report for mevlog-rs](hotpath-report3.png)](https://github.com/pawurb/mevlog-rs)
+[![Profiling report for mevlog-rs](hotpath-timing-report.png)](https://github.com/pawurb/mevlog-rs)
 
 A lightweight, easy-to-configure Rust profiler that shows exactly where your code spends time and allocates memory. Instrument any function or code block to quickly spot bottlenecks, and focus your optimizations where they matter most.
 
@@ -106,7 +106,7 @@ Run your program with a selected flag to print a similar report:
 cargo run --features='hotpath,hotpath-alloc-bytes-total'
 ```
 
-![Alloc report](alloc-report.png)
+![Alloc report](hotpath-alloc-report.png)
 
 ### Profiling memory allocations for async functions
 

@@ -40,7 +40,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        "Total number of heap allocations performed during each function call.".to_string()
+        "Total number of heap allocations during each function call.".to_string()
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {

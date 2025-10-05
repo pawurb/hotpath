@@ -32,7 +32,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        "Cumulative bytes allocated across all allocations within each function call.".to_string()
+        "Cumulative bytes allocated during each function call.".to_string()
     }
 
     fn percentiles(&self) -> Vec<u8> {
