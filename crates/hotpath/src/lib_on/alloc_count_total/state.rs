@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 pub enum Measurement {
-    Allocation(&'static str, AllocationInfo), // function_name, allocation_info
+    Allocation(&'static str, AllocationInfo, bool), // function_name, allocation_info, wrapper
 }
 
 #[derive(Debug, Clone)]
@@ -14,6 +14,7 @@ pub struct FunctionStats {
     count_total_hist: Option<Histogram<u64>>,
     pub has_data: bool,
     pub has_unsupported_async: bool,
+    pub wrapper: bool,
 }
 
 impl FunctionStats {
@@ -21,7 +22,7 @@ impl FunctionStats {
     const HIGH_COUNT: u64 = 1_000_000_000; // 1 billion allocations
     const SIGFIGS: u8 = 3;
 
-    pub fn new_alloc(alloc_info: &AllocationInfo) -> Self {
+    pub fn new_alloc(alloc_info: &AllocationInfo, wrapper: bool) -> Self {
         let count_total_hist =
             Histogram::<u64>::new_with_bounds(Self::LOW_COUNT, Self::HIGH_COUNT, Self::SIGFIGS)
                 .expect("count_total histogram init");
@@ -31,6 +32,7 @@ impl FunctionStats {
             count_total_hist: Some(count_total_hist),
             has_data: true,
             has_unsupported_async: alloc_info.unsupported_async,
+            wrapper,
         };
         s.record_alloc(alloc_info);
         s
@@ -100,11 +102,11 @@ pub(crate) fn process_measurement(
     m: Measurement,
 ) {
     match m {
-        Measurement::Allocation(name, alloc_info) => {
+        Measurement::Allocation(name, alloc_info, wrapper) => {
             if let Some(s) = stats.get_mut(name) {
                 s.update_alloc(&alloc_info);
             } else {
-                stats.insert(name, FunctionStats::new_alloc(&alloc_info));
+                stats.insert(name, FunctionStats::new_alloc(&alloc_info, wrapper));
             }
         }
     }
@@ -112,7 +114,7 @@ pub(crate) fn process_measurement(
 
 use crate::lib_on::HOTPATH_STATE;
 
-pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo) {
+pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo, wrapper: bool) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {
         panic!(
             "GuardBuilder::new(\"main\").build() must be called when --features hotpath-alloc-count-total is enabled"
@@ -130,6 +132,6 @@ pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo) {
         return;
     };
 
-    let measurement = Measurement::Allocation(name, alloc_info);
+    let measurement = Measurement::Allocation(name, alloc_info, wrapper);
     let _ = sender.try_send(measurement);
 }

@@ -41,11 +41,20 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {
         let filtered_stats: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
 
-        // Calculate total bytes across all functions for percentage calculation
-        let grand_total_bytes: u64 = filtered_stats
+        // Find wrapper function's total bytes if it exists
+        let wrapper_total_bytes = self
+            .stats
             .iter()
-            .map(|(_, stats)| stats.total_bytes())
-            .sum();
+            .find(|(_, s)| s.wrapper)
+            .map(|(_, s)| s.total_bytes());
+
+        // Use wrapper's total if available, otherwise sum all functions
+        let grand_total_bytes: u64 = wrapper_total_bytes.unwrap_or_else(|| {
+            filtered_stats
+                .iter()
+                .map(|(_, stats)| stats.total_bytes())
+                .sum()
+        });
 
         filtered_stats
             .into_iter()

@@ -23,12 +23,13 @@ pub fn format_bytes(bytes: u64) -> String {
 #[doc(hidden)]
 pub struct NoopAsyncAllocGuard {
     name: &'static str,
+    wrapper: bool,
 }
 
 impl NoopAsyncAllocGuard {
     #[inline]
-    pub fn new(name: &'static str) -> Self {
-        Self { name }
+    pub fn new(name: &'static str, wrapper: bool) -> Self {
+        Self { name, wrapper }
     }
 }
 
@@ -41,13 +42,13 @@ impl Drop for NoopAsyncAllocGuard {
                     bytes_total: 0,
                     unsupported_async: true,
                 };
-                crate::lib_on::alloc_bytes_total::state::send_alloc_measurement(self.name, alloc_info);
+                crate::lib_on::alloc_bytes_total::state::send_alloc_measurement(self.name, alloc_info, self.wrapper);
             } else if #[cfg(feature = "hotpath-alloc-count-total")] {
                 let alloc_info = crate::lib_on::alloc_count_total::core::AllocationInfo {
                     count_total: 0,
                     unsupported_async: true,
                 };
-                crate::lib_on::alloc_count_total::state::send_alloc_measurement(self.name, alloc_info);
+                crate::lib_on::alloc_count_total::state::send_alloc_measurement(self.name, alloc_info, self.wrapper);
             }
         }
     }

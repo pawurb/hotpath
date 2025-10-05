@@ -35,14 +35,24 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {
+        // Find wrapper function's total value if it exists
+        let wrapper_total = self
+            .stats
+            .iter()
+            .find(|(_, s)| s.wrapper)
+            .map(|(_, s)| s.total_duration_ns);
+
+        // Use wrapper's total if available, otherwise use total_elapsed
+        let reference_total = wrapper_total.unwrap_or(self.total_elapsed.as_nanos() as u64);
+
         self.stats
             .iter()
             .filter(|(_, s)| s.has_data)
             .map(|(function_name, stats)| {
                 let short_name = format_function_name(function_name);
 
-                let percentage = if self.total_elapsed.as_nanos() > 0 {
-                    (stats.total_duration_ns as f64 / self.total_elapsed.as_nanos() as f64) * 100.0
+                let percentage = if reference_total > 0 {
+                    (stats.total_duration_ns as f64 / reference_total as f64) * 100.0
                 } else {
                     0.0
                 };

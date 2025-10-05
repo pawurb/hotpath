@@ -192,14 +192,14 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                             let _measure_guard = match runtime_flavor {
                                 Some(RuntimeFlavor::CurrentThread) => {
-                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(#measurement_name))
+                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(#measurement_name, true))
                                 }
                                 _ => {
-                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(#measurement_name))
+                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(#measurement_name, true))
                                 }
                             };
                         } else {
-                            let _measure_guard = hotpath::TimeGuard::new(#measurement_name);
+                            let _measure_guard = hotpath::TimeGuard::new(#measurement_name, true);
                         }
                     }
 
@@ -230,9 +230,9 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         feature = "hotpath-alloc-bytes-total",
                         feature = "hotpath-alloc-count-total"
                     ))] {
-                        let _measure_guard = hotpath::AllocGuard::new(#measurement_name);
+                        let _measure_guard = hotpath::AllocGuard::new(#measurement_name, true);
                     } else {
-                        let _measure_guard = hotpath::TimeGuard::new(#measurement_name);
+                        let _measure_guard = hotpath::TimeGuard::new(#measurement_name, true);
                     }
                 }
 
@@ -308,14 +308,14 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                             let _guard = match runtime_flavor {
                                 Some(RuntimeFlavor::CurrentThread) => {
-                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name)))
+                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name), false))
                                 }
                                 _ => {
-                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name)))
+                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name), false))
                                 }
                             };
                         } else {
-                            let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                            let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name), false);
                         }
                     }
 
@@ -333,9 +333,9 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
                         feature = "hotpath-alloc-bytes-total",
                         feature = "hotpath-alloc-count-total"
                     ))] {
-                        let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name));
+                        let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name), false);
                     } else {
-                        let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name));
+                        let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name), false);
                     }
                 }
 

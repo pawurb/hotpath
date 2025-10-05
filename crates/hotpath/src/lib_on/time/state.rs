@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 pub enum Measurement {
-    Duration(u64, &'static str), // duration_ns, function_name
+    Duration(u64, &'static str, bool), // duration_ns, function_name, wrapper
 }
 
 #[derive(Debug)]
@@ -13,6 +13,7 @@ pub struct FunctionStats {
     pub count: u64,
     hist: Option<Histogram<u64>>,
     pub has_data: bool,
+    pub wrapper: bool,
 }
 
 impl FunctionStats {
@@ -20,7 +21,7 @@ impl FunctionStats {
     const HIGH_NS: u64 = 10_000_000_000; // 10s
     const SIGFIGS: u8 = 3;
 
-    pub fn new_duration(first_ns: u64) -> Self {
+    pub fn new_duration(first_ns: u64, wrapper: bool) -> Self {
         let hist = Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
             .expect("hdrhistogram init");
 
@@ -29,6 +30,7 @@ impl FunctionStats {
             count: 1,
             hist: Some(hist),
             has_data: true,
+            wrapper,
         };
         s.record_time(first_ns);
         s
@@ -81,11 +83,11 @@ pub(crate) fn process_measurement(
     m: Measurement,
 ) {
     match m {
-        Measurement::Duration(duration_ns, name) => {
+        Measurement::Duration(duration_ns, name, wrapper) => {
             if let Some(s) = stats.get_mut(name) {
                 s.update_duration(duration_ns);
             } else {
-                stats.insert(name, FunctionStats::new_duration(duration_ns));
+                stats.insert(name, FunctionStats::new_duration(duration_ns, wrapper));
             }
         }
     }
@@ -93,7 +95,7 @@ pub(crate) fn process_measurement(
 
 use super::super::HOTPATH_STATE;
 
-pub fn send_duration_measurement(name: &'static str, duration: Duration) {
+pub fn send_duration_measurement(name: &'static str, duration: Duration, wrapper: bool) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {
         panic!(
             "GuardBuilder::new(\"main\").build() must be called when --features hotpath is enabled"
@@ -111,6 +113,6 @@ pub fn send_duration_measurement(name: &'static str, duration: Duration) {
         return;
     };
 
-    let measurement = Measurement::Duration(duration.as_nanos() as u64, name);
+    let measurement = Measurement::Duration(duration.as_nanos() as u64, name, wrapper);
     let _ = sender.try_send(measurement);
 }

@@ -135,9 +135,9 @@ macro_rules! measure_block {
                 feature = "hotpath-alloc-bytes-total",
                 feature = "hotpath-alloc-count-total"
             ))] {
-                let _guard = hotpath::AllocGuard::new($label);
+                let _guard = hotpath::AllocGuard::new($label, false);
             } else {
-                let _guard = hotpath::TimeGuard::new($label);
+                let _guard = hotpath::TimeGuard::new($label, false);
             }
         }
 

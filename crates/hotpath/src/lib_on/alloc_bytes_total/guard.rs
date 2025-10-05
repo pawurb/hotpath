@@ -2,11 +2,12 @@ use super::core::AllocationInfo;
 
 pub struct AllocGuard {
     name: &'static str,
+    wrapper: bool,
 }
 
 impl AllocGuard {
     #[inline]
-    pub fn new(name: &'static str) -> Self {
+    pub fn new(name: &'static str, wrapper: bool) -> Self {
         // Start allocation tracking
         super::core::ALLOCATIONS.with(|stack| {
             let mut s = stack.borrow_mut();
@@ -16,7 +17,7 @@ impl AllocGuard {
             s.elements[depth] = AllocationInfo::default();
         });
 
-        Self { name }
+        Self { name, wrapper }
     }
 }
 
@@ -34,6 +35,6 @@ impl Drop for AllocGuard {
             popped
         });
 
-        super::state::send_alloc_measurement(self.name, alloc_info);
+        super::state::send_alloc_measurement(self.name, alloc_info, self.wrapper);
     }
 }
