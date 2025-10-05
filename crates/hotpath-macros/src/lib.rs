@@ -22,9 +22,10 @@ impl Format {
 
 /// Initializes the hotpath profiling system and generates a performance report on program exit.
 ///
-/// This attribute macro must be applied to your program's main function to enable profiling.
+/// This attribute macro should be applied to your program's main (or other entry point) function to enable profiling.
 /// It creates a guard that initializes the background measurement processing thread and
 /// automatically displays a performance summary when the program exits.
+/// Additionally it creates a measurement guard that will be used to measure the wrapper function itself.
 ///
 /// # Parameters
 ///
