@@ -158,22 +158,89 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let percentiles_array = quote! { &[#(#percentiles),*] };
     let format_token = format.to_tokens();
 
-    let output = quote! {
-        #vis #sig {
-            let _hotpath = {
-                fn __caller_fn() {}
-                let caller_name = std::any::type_name_of_val(&__caller_fn)
-                    .strip_suffix("::__caller_fn")
-                    .unwrap_or(std::any::type_name_of_val(&__caller_fn))
-                    .replace("::{{closure}}", "");
+    let asyncness = sig.asyncness.is_some();
+    let fn_name = &sig.ident;
+    let measurement_name = quote! { concat!(module_path!(), "::", stringify!(#fn_name)) };
 
-                hotpath::GuardBuilder::new(caller_name.to_string())
-                    .percentiles(#percentiles_array)
-                    .format(#format_token)
-                    .build()
-            };
+    let output = if asyncness {
+        quote! {
+            #vis #sig {
+                async {
+                    let _hotpath = {
+                        fn __caller_fn() {}
+                        let caller_name = std::any::type_name_of_val(&__caller_fn)
+                            .strip_suffix("::__caller_fn")
+                            .unwrap_or(std::any::type_name_of_val(&__caller_fn))
+                            .replace("::{{closure}}", "");
 
-            #block
+                        hotpath::GuardBuilder::new(caller_name.to_string())
+                            .percentiles(#percentiles_array)
+                            .format(#format_token)
+                            .build()
+                    };
+
+                    hotpath::cfg_if! {
+                        if #[cfg(feature = "hotpath-off")] {
+                            // No-op when hotpath-off is enabled
+                        } else if #[cfg(any(
+                            feature = "hotpath-alloc-bytes-total",
+                            feature = "hotpath-alloc-bytes-max",
+                            feature = "hotpath-alloc-count-total",
+                            feature = "hotpath-alloc-count-max"
+                        ))] {
+                            use hotpath::{Handle, RuntimeFlavor};
+                            let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
+
+                            let _measure_guard = match runtime_flavor {
+                                Some(RuntimeFlavor::CurrentThread) => {
+                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(#measurement_name))
+                                }
+                                _ => {
+                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(#measurement_name))
+                                }
+                            };
+                        } else {
+                            let _measure_guard = hotpath::TimeGuard::new(#measurement_name);
+                        }
+                    }
+
+                    #block
+                }.await
+            }
+        }
+    } else {
+        quote! {
+            #vis #sig {
+                let _hotpath = {
+                    fn __caller_fn() {}
+                    let caller_name = std::any::type_name_of_val(&__caller_fn)
+                        .strip_suffix("::__caller_fn")
+                        .unwrap_or(std::any::type_name_of_val(&__caller_fn))
+                        .replace("::{{closure}}", "");
+
+                    hotpath::GuardBuilder::new(caller_name.to_string())
+                        .percentiles(#percentiles_array)
+                        .format(#format_token)
+                        .build()
+                };
+
+                hotpath::cfg_if! {
+                    if #[cfg(feature = "hotpath-off")] {
+                        // No-op when hotpath-off is enabled
+                    } else if #[cfg(any(
+                        feature = "hotpath-alloc-bytes-total",
+                        feature = "hotpath-alloc-bytes-max",
+                        feature = "hotpath-alloc-count-total",
+                        feature = "hotpath-alloc-count-max"
+                    ))] {
+                        let _measure_guard = hotpath::AllocGuard::new(#measurement_name);
+                    } else {
+                        let _measure_guard = hotpath::TimeGuard::new(#measurement_name);
+                    }
+                }
+
+                #block
+            }
         }
     };
 

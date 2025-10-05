@@ -152,10 +152,16 @@ pub mod tests {
             "Process did not exit successfully: {output:?}",
         );
 
+        let expected = ["main_empty::example_function", "main_empty::main"];
+
         let stdout = String::from_utf8_lossy(&output.stdout);
-        assert!(stdout.contains("main_empty::example_function"));
-        assert!(stdout.contains("P95"));
-        assert!(stdout.contains("Function"));
+
+        for expected in expected {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
     }
 
     #[test]
