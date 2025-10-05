@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::ProfilingMode;
+
 use super::super::output::{format_function_name, MetricType, MetricsProvider};
 use super::state::FunctionStats;
 
@@ -32,6 +34,10 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
 
     fn description(&self) -> String {
         "Execution duration of functions.".to_string()
+    }
+
+    fn profiling_mode(&self) -> ProfilingMode {
+        ProfilingMode::Timing
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {

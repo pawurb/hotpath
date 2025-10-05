@@ -491,15 +491,16 @@ pub(crate) fn display_table(metrics_provider: &dyn MetricsProvider<'_>) {
     }
 
     println!(
-        "{} {}",
+        "{} {} - {}",
         "[hotpath]".blue().bold(),
+        metrics_provider.profiling_mode(),
         metrics_provider.description()
     );
     println!(
-        "Total time: {:.2?}",
-        Duration::from_nanos(metrics_provider.total_elapsed())
+        "{}: {:.2?}",
+        metrics_provider.caller_name().yellow().bold(),
+        Duration::from_nanos(metrics_provider.total_elapsed()),
     );
-    println!("Caller: {}", metrics_provider.caller_name());
     table.printstd();
 
     if metrics_provider.has_unsupported_async() {
@@ -566,6 +567,7 @@ pub(crate) fn get_sorted_entries(
 /// * [`MetricType`] - Metric value types
 pub trait MetricsProvider<'a> {
     fn description(&self) -> String;
+    fn profiling_mode(&self) -> ProfilingMode;
     fn headers(&self) -> Vec<String> {
         let mut headers = vec![
             "Function".to_string(),

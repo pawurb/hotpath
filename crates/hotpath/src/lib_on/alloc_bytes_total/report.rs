@@ -1,3 +1,4 @@
+use crate::ProfilingMode;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -24,6 +25,10 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
             percentiles,
             caller_name,
         }
+    }
+
+    fn profiling_mode(&self) -> ProfilingMode {
+        ProfilingMode::AllocBytesTotal
     }
 
     fn description(&self) -> String {

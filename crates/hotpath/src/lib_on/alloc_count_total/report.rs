@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use super::super::output::{format_function_name, MetricType, MetricsProvider};
 use super::state::FunctionStats;
+use crate::ProfilingMode;
 
 pub struct StatsData<'a> {
     pub stats: &'a HashMap<&'static str, FunctionStats>,
@@ -28,6 +29,10 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
 
     fn percentiles(&self) -> Vec<u8> {
         self.percentiles.clone()
+    }
+
+    fn profiling_mode(&self) -> ProfilingMode {
+        ProfilingMode::AllocCountTotal
     }
 
     fn has_unsupported_async(&self) -> bool {
