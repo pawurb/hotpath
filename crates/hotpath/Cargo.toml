@@ -1,6 +1,6 @@
 [package]
 name = "hotpath"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 repository = "https://github.com/pawurb/hotpath"
 description = " A simple Rust profiler that shows exactly where your code spends time and allocates memory"
@@ -28,7 +28,7 @@ colored = { version = "3" }
 crossbeam-channel = "0.5"
 eyre = "0.6"
 hdrhistogram = { version = "7.5", default-features = false }
-hotpath-macros = { version = "0.4.0" }
+hotpath-macros = { version = "0.4.1" }
 # hotpath-macros = { path = "../hotpath-macros" }
 prettytable-rs = { version = "0.10", default-features = false }
 serde = { version = "1.0", features = ["derive"] }

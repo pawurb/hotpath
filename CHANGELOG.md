@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.1] - 2025-10-06
+
+### 🚀 Features
+
+- Add emoji to primary timing diff
+- Dont spam CI comments
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.4.1
+
 ## [0.4.0] - 2025-10-05
 
 ### 🚀 Features
