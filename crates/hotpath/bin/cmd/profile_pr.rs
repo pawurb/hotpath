@@ -309,7 +309,7 @@ fn format_comparison_markdown(
     ));
     markdown.push_str(&format!(
         "**Total Elapsed Time:** {}\n\n",
-        comparison.total_elapsed_diff
+        comparison.total_elapsed_diff.format_with_emoji(emoji_threshold)
     ));
     markdown.push_str(&format!(
         "**Profiling Mode:** {} - {}\n",
