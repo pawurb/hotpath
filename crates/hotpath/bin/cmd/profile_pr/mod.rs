@@ -1,8 +1,10 @@
+mod comment;
+
 use clap::Parser;
+use comment::upsert_pr_comment;
 use eyre::Result;
 use hotpath::MetricsJson;
 use prettytable::{Cell, Row, Table};
-use serde_json::json;
 use std::env;
 use std::fmt;
 use std::time::Duration;
@@ -44,16 +46,32 @@ impl ProfilePrArgs {
             Some(self.emoji_threshold.unwrap_or(20))
         };
 
-        match post_pr_comment(
+        let head_metrics_data: MetricsJson = serde_json::from_str(&self.head_metrics)
+            .map_err(|e| eyre::eyre!("Failed to deserialize head metrics: {}", e))?;
+        let base_metrics_data: MetricsJson = serde_json::from_str(&self.base_metrics)
+            .map_err(|e| eyre::eyre!("Failed to deserialize base metrics: {}", e))?;
+
+        let comparison = compare_metrics(&base_metrics_data, &head_metrics_data);
+        let comparison_markdown =
+            format_comparison_markdown(&comparison, &base_metrics_data, emoji_threshold);
+
+        let mut body = comparison_markdown;
+        body.push_str("\n<details>\n<summary>📊 View Raw JSON Metrics</summary>\n\n");
+        body.push_str("### PR Metrics\n```json\n");
+        body.push_str(&serde_json::to_string_pretty(&head_metrics_data)?);
+        body.push_str("\n```\n\n### Main Branch Metrics\n```json\n");
+        body.push_str(&serde_json::to_string_pretty(&base_metrics_data)?);
+        body.push_str("\n```\n</details>\n");
+
+        match upsert_pr_comment(
             &repo,
             &self.pr_number,
-            &self.head_metrics,
-            &self.base_metrics,
             &self.github_token,
-            emoji_threshold,
+            &body,
+            &head_metrics_data.hotpath_profiling_mode,
         ) {
-            Ok(_) => println!("Successfully posted comment"),
-            Err(e) => println!("Failed to post comment: {}", e),
+            Ok(_) => {}
+            Err(e) => println!("Failed to post/update comment: {}", e),
         }
 
         Ok(())
@@ -309,7 +327,9 @@ fn format_comparison_markdown(
     ));
     markdown.push_str(&format!(
         "**Total Elapsed Time:** {}\n\n",
-        comparison.total_elapsed_diff.format_with_emoji(emoji_threshold)
+        comparison
+            .total_elapsed_diff
+            .format_with_emoji(emoji_threshold)
     ));
     markdown.push_str(&format!(
         "**Profiling Mode:** {} - {}\n",
@@ -355,64 +375,6 @@ fn format_comparison_markdown(
     markdown.push_str("*Generated with [hotpath](https://github.com/pawurb/hotpath/)*\n");
 
     markdown
-}
-
-fn post_pr_comment(
-    repo: &str,
-    pr_number: &str,
-    pr_metrics: &str,
-    main_metrics: &str,
-    token: &str,
-    emoji_threshold: Option<u32>,
-) -> Result<()> {
-    let url = format!(
-        "https://api.github.com/repos/{}/issues/{}/comments",
-        repo, pr_number
-    );
-
-    let pr_metrics_data: MetricsJson = serde_json::from_str(pr_metrics)
-        .map_err(|e| eyre::eyre!("Failed to deserialize PR metrics: {}", e))?;
-    let main_metrics_data: MetricsJson = serde_json::from_str(main_metrics)
-        .map_err(|e| eyre::eyre!("Failed to deserialize main metrics: {}", e))?;
-
-    let comparison = compare_metrics(&main_metrics_data, &pr_metrics_data);
-    let comparison_markdown =
-        format_comparison_markdown(&comparison, &main_metrics_data, emoji_threshold);
-
-    let mut body = comparison_markdown;
-    body.push_str("\n<details>\n<summary>📊 View Raw JSON Metrics</summary>\n\n");
-    body.push_str("### PR Metrics\n```json\n");
-    body.push_str(&serde_json::to_string_pretty(&pr_metrics_data)?);
-    body.push_str("\n```\n\n### Main Branch Metrics\n```json\n");
-    body.push_str(&serde_json::to_string_pretty(&main_metrics_data)?);
-    body.push_str("\n```\n</details>\n");
-
-    let comment_body = json!({
-        "body": body,
-    });
-
-    let response = ureq::post(&url)
-        .header("Authorization", &format!("token {}", token))
-        .header("Accept", "application/vnd.github.v3+json")
-        .header("User-Agent", "hotpath-ci-action")
-        .send_json(&comment_body)?;
-
-    let status = response.status();
-    if status.is_success() {
-        println!("Successfully posted comment");
-    } else {
-        println!("Failed to post comment: {}", status);
-        let error_text = response.into_body().read_to_string()?;
-        println!("Error details: {}", error_text);
-        if status.as_u16() == 403 {
-            println!("This is likely a permissions issue. Make sure the workflow has:");
-            println!("permissions:");
-            println!("  pull-requests: write");
-            println!("  contents: read");
-        }
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]
