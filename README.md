@@ -12,6 +12,11 @@ A lightweight, easy-to-configure Rust profiler that shows exactly where your cod
 - **Memory allocation tracking** — track bytes allocated or allocation counts per function.
 - **Detailed stats**: avg, total time, call count, % of total runtime, and configurable percentiles (p95, p99, etc.).
 - **Background processing** for minimal profiling impact.
+- **GitHub Actions integration** - configure CI to automatically benchmark your program against a base branch for each PR
+
+![hotpath GitHub Actions](mevlog-enable-cache.png)
+
+See [mevlog-rs CI](https://github.com/pawurb/mevlog-rs/blob/main/.github/workflows/hotpath.yml) for a sample config.
 
 ## Quick Start
 
