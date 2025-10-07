@@ -5,6 +5,8 @@
 
 A lightweight, easy-to-configure Rust profiler that shows exactly where your code spends time and allocates memory. Instrument any function or code block to quickly spot bottlenecks, and focus your optimizations where they matter most.
 
+For a deep dive into how the library works under the hood, see [this post](https://pawelurbanek.com/rust-optimize-performance).
+
 ## Features
 
 - **Zero-cost when disabled** — fully gated by a feature flag.
