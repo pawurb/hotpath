@@ -1,3 +1,7 @@
+#[cfg(target_os = "linux")]
+use quanta::Instant;
+
+#[cfg(not(target_os = "linux"))]
 use std::time::Instant;
 
 #[doc(hidden)]
