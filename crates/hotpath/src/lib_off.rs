@@ -16,19 +16,25 @@ pub enum Format {
     JsonPretty,
 }
 
-pub fn init(_caller_name: String, _percentiles: &[u8], _format: Format) -> HotPath {
-    HotPath
-}
-
 pub struct MeasurementGuard {}
 
 impl MeasurementGuard {
     pub fn new(_name: &'static str, _wrapper: bool, _unsupported_async: bool) -> Self {
         Self {}
     }
+
+    pub fn build(_name: &'static str, _wrapper: bool) -> Self {
+        Self {}
+    }
 }
 
 pub struct HotPath;
+
+impl HotPath {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 pub struct GuardBuilder {}
 

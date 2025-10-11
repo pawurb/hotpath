@@ -30,6 +30,35 @@ cfg_if::cfg_if! {
     }
 }
 
+impl MeasurementGuard {
+    pub fn build(measurement_name: &'static str, wrapper: bool) -> Self {
+        #[allow(clippy::needless_bool)]
+        let unsupported_async = if wrapper {
+            // top wrapper functions are not inside a runtime
+            false
+        } else {
+            cfg_if::cfg_if! {
+                if #[cfg(any(
+                    feature = "hotpath-alloc-bytes-total",
+                    feature = "hotpath-alloc-count-total"
+                ))] {
+                    use tokio::runtime::{Handle, RuntimeFlavor};
+
+                    let runtime_flavor = Handle::try_current()
+                        .ok()
+                        .map(|h| h.runtime_flavor());
+
+                    !matches!(runtime_flavor, Some(RuntimeFlavor::CurrentThread))
+                } else {
+                    false
+                }
+            }
+        };
+
+        MeasurementGuard::new(measurement_name, wrapper, unsupported_async)
+    }
+}
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "hotpath-alloc-bytes-total")] {
         mod alloc_bytes_total;
@@ -387,89 +416,98 @@ impl GuardBuilder {
             ReporterConfig::None => Box::new(output::TableReporter),
         };
 
-        init_hotpath(self.caller_name, &self.percentiles, reporter)
+        HotPath::new(self.caller_name, &self.percentiles, reporter)
     }
 }
 
-fn init_hotpath(
-    caller_name: &'static str,
-    percentiles: &[u8],
-    _reporter: Box<dyn Reporter>,
-) -> HotPath {
-    let percentiles = percentiles.to_vec();
+impl HotPath {
+    pub fn new(
+        caller_name: &'static str,
+        percentiles: &[u8],
+        _reporter: Box<dyn Reporter>,
+    ) -> Self {
+        let percentiles = percentiles.to_vec();
 
-    let arc_swap = HOTPATH_STATE.get_or_init(|| ArcSwapOption::from(None));
+        let arc_swap = HOTPATH_STATE.get_or_init(|| ArcSwapOption::from(None));
 
-    if arc_swap.load().is_some() {
-        panic!("More than one _hotpath guard cannot be alive at the same time.");
-    }
+        if arc_swap.load().is_some() {
+            panic!("More than one _hotpath guard cannot be alive at the same time.");
+        }
 
-    let (tx, rx) = bounded::<Measurement>(10000);
-    let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
-    let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
-    let start_time = Instant::now();
+        let (tx, rx) = bounded::<Measurement>(10000);
+        let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
+        let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
+        let start_time = Instant::now();
 
-    let state_arc = Arc::new(RwLock::new(HotPathState {
-        sender: Some(tx),
-        shutdown_tx: Some(shutdown_tx),
-        completion_rx: Some(completion_rx),
-        start_time,
-        caller_name,
-        percentiles,
-    }));
+        let state_arc = Arc::new(RwLock::new(HotPathState {
+            sender: Some(tx),
+            shutdown_tx: Some(shutdown_tx),
+            completion_rx: Some(completion_rx),
+            start_time,
+            caller_name,
+            percentiles,
+        }));
 
-    thread::Builder::new()
-        .name("hotpath-worker".into())
-        .spawn(move || {
-            let mut local_stats = HashMap::<&'static str, FunctionStats>::new();
+        thread::Builder::new()
+            .name("hotpath-worker".into())
+            .spawn(move || {
+                let mut local_stats = HashMap::<&'static str, FunctionStats>::new();
 
-            loop {
-                select! {
-                    recv(rx) -> result => {
-                        match result {
-                            Ok(measurement) => {
+                loop {
+                    select! {
+                        recv(rx) -> result => {
+                            match result {
+                                Ok(measurement) => {
+                                    process_measurement(&mut local_stats, measurement);
+                                }
+                                Err(_) => break, // Channel disconnected
+                            }
+                        }
+                        recv(shutdown_rx) -> _ => {
+                            // Process remaining messages after shutdown signal
+                            while let Ok(measurement) = rx.try_recv() {
                                 process_measurement(&mut local_stats, measurement);
                             }
-                            Err(_) => break, // Channel disconnected
+                            break;
                         }
-                    }
-                    recv(shutdown_rx) -> _ => {
-                        // Process remaining messages after shutdown signal
-                        while let Ok(measurement) = rx.try_recv() {
-                            process_measurement(&mut local_stats, measurement);
-                        }
-                        break;
                     }
                 }
-            }
 
-            // Send stats via completion channel
-            let _ = completion_tx.send(local_stats);
-        })
-        .expect("Failed to spawn hotpath-worker thread");
+                // Send stats via completion channel
+                let _ = completion_tx.send(local_stats);
+            })
+            .expect("Failed to spawn hotpath-worker thread");
 
-    arc_swap.store(Some(Arc::clone(&state_arc)));
+        arc_swap.store(Some(Arc::clone(&state_arc)));
 
-    // Override reporter with JsonReporter when hotpath-ci feature is enabled
-    #[cfg(feature = "hotpath-ci")]
-    let reporter: Box<dyn Reporter> = Box::new(output::JsonReporter);
+        // Override reporter with JsonReporter when hotpath-ci feature is enabled
+        #[cfg(feature = "hotpath-ci")]
+        let reporter: Box<dyn Reporter> = Box::new(output::JsonReporter);
 
-    #[cfg(not(feature = "hotpath-ci"))]
-    let reporter = _reporter;
+        #[cfg(not(feature = "hotpath-ci"))]
+        let reporter = _reporter;
 
-    HotPath {
-        state: Arc::clone(&state_arc),
-        reporter,
+        let wrapper_guard = MeasurementGuard::build(caller_name, true);
+
+        Self {
+            state: Arc::clone(&state_arc),
+            reporter,
+            wrapper_guard: Some(wrapper_guard),
+        }
     }
 }
 
 pub struct HotPath {
     state: Arc<RwLock<HotPathState>>,
     reporter: Box<dyn Reporter>,
+    wrapper_guard: Option<MeasurementGuard>,
 }
 
 impl Drop for HotPath {
     fn drop(&mut self) {
+        let wrapper_guard = self.wrapper_guard.take().unwrap();
+        drop(wrapper_guard);
+
         let state: Arc<RwLock<HotPathState>> = Arc::clone(&self.state);
 
         // Signal shutdown and wait for processing thread to complete

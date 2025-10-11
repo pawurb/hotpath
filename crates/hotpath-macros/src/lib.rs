@@ -161,7 +161,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let asyncness = sig.asyncness.is_some();
     let fn_name = &sig.ident;
-    let measurement_name = quote! { concat!(module_path!(), "::", stringify!(#fn_name)) };
 
     let output = if asyncness {
         quote! {
@@ -175,27 +174,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                             .format(#format_token)
                             .build()
                     };
-
-                    hotpath::cfg_if! {
-                        if #[cfg(any(
-                            feature = "hotpath-alloc-bytes-total",
-                            feature = "hotpath-alloc-count-total"
-                        ))] {
-                            use hotpath::{Handle, RuntimeFlavor};
-                            let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
-
-                            let _measure_guard = match runtime_flavor {
-                                Some(RuntimeFlavor::CurrentThread) => {
-                                    hotpath::MeasurementGuard::new(#measurement_name, true, false)
-                                }
-                                _ => {
-                                    hotpath::MeasurementGuard::new(#measurement_name, true, true)
-                                }
-                            };
-                        } else {
-                            let _measure_guard = hotpath::MeasurementGuard::new(#measurement_name, true, false);
-                        }
-                    }
 
                     #block
                 }.await
@@ -212,8 +190,6 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .format(#format_token)
                         .build()
                 };
-
-                let _measure_guard = hotpath::MeasurementGuard::new(#measurement_name, true, false);
 
                 #block
             }
@@ -275,28 +251,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #vis #sig {
                 async {
-                    hotpath::cfg_if! {
-                        if #[cfg(feature = "hotpath-off")] {
-                            // No-op when hotpath-off is enabled
-                        } else if #[cfg(any(
-                            feature = "hotpath-alloc-bytes-total",
-                            feature = "hotpath-alloc-count-total"
-                        ))] {
-                            use hotpath::{Handle, RuntimeFlavor};
-                            let runtime_flavor = Handle::try_current().ok().map(|h| h.runtime_flavor());
-
-                            let _guard = match runtime_flavor {
-                                Some(RuntimeFlavor::CurrentThread) => {
-                                    hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, false)
-                                }
-                                _ => {
-                                    hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, true)
-                                }
-                            };
-                        } else {
-                            let _guard = hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, false);
-                        }
-                    }
+                    let _guard = hotpath::MeasurementGuard::build(concat!(module_path!(), "::", #name), false);
 
                     #block
                 }.await
@@ -305,7 +260,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #vis #sig {
-                let _guard = hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, false);
+                let _guard = hotpath::MeasurementGuard::build(concat!(module_path!(), "::", #name), false);
 
                 #block
             }

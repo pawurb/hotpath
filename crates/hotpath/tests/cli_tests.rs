@@ -374,10 +374,11 @@ pub mod tests {
 
         let expected_content = [
             "Function, Calls, Avg, P50, P90, P95, Total, % Total",
-            "Functions measured: 3",
+            "Functions measured: 4",
             "csv_file_reporter::async_function, 100",
             "csv_file_reporter::sync_function, 100",
             "custom_block, 100",
+            "main, 1",
         ];
 
         for expected in expected_content {
@@ -522,5 +523,36 @@ pub mod tests {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(stdout.contains("custom_block output"));
+    }
+
+    #[test]
+    fn test_custom_guard_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "custom_guard",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        let expected_content = [
+            "custom_guard::main",
+            "custom_guard::sync_function",
+            "custom_guard::async_function",
+            "custom_block",
+        ];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
     }
 }
