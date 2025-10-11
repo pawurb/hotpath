@@ -93,7 +93,7 @@ pub(crate) struct HotPathState {
     pub shutdown_tx: Option<Sender<()>>,
     pub completion_rx: Option<Receiver<HashMap<&'static str, FunctionStats>>>,
     pub start_time: Instant,
-    pub caller_name: String,
+    pub caller_name: &'static str,
     pub percentiles: Vec<u8>,
 }
 

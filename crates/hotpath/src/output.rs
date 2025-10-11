@@ -605,7 +605,7 @@ pub trait MetricsProvider<'a> {
         stats: &'a HashMap<&'static str, FunctionStats>,
         total_elapsed: Duration,
         percentiles: Vec<u8>,
-        caller_name: String,
+        caller_name: &'static str,
     ) -> Self
     where
         Self: Sized;

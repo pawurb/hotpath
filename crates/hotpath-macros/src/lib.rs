@@ -168,13 +168,9 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
             #vis #sig {
                 async {
                     let _hotpath = {
-                        fn __caller_fn() {}
-                        let caller_name = std::any::type_name_of_val(&__caller_fn)
-                            .strip_suffix("::__caller_fn")
-                            .unwrap_or(std::any::type_name_of_val(&__caller_fn))
-                            .replace("::{{closure}}", "");
+                        let caller_name: &'static str = concat!(module_path!(), "::", stringify!(#fn_name));
 
-                        hotpath::GuardBuilder::new(caller_name.to_string())
+                        hotpath::GuardBuilder::new(caller_name)
                             .percentiles(#percentiles_array)
                             .format(#format_token)
                             .build()
@@ -209,13 +205,9 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
         quote! {
             #vis #sig {
                 let _hotpath = {
-                    fn __caller_fn() {}
-                    let caller_name = std::any::type_name_of_val(&__caller_fn)
-                        .strip_suffix("::__caller_fn")
-                        .unwrap_or(std::any::type_name_of_val(&__caller_fn))
-                        .replace("::{{closure}}", "");
+                    let caller_name: &'static str = concat!(module_path!(), "::", stringify!(#fn_name));
 
-                    hotpath::GuardBuilder::new(caller_name.to_string())
+                    hotpath::GuardBuilder::new(caller_name)
                         .percentiles(#percentiles_array)
                         .format(#format_token)
                         .build()

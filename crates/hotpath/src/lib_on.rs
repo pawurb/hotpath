@@ -221,7 +221,7 @@ pub(crate) static HOTPATH_STATE: OnceLock<ArcSwapOption<RwLock<HotPathState>>> =
 /// * [`Format`] - Output format options
 /// * [`Reporter`] - Custom reporter trait
 pub struct GuardBuilder {
-    caller_name: String,
+    caller_name: &'static str,
     percentiles: Vec<u8>,
     reporter: ReporterConfig,
 }
@@ -251,9 +251,9 @@ impl GuardBuilder {
     /// let _guard = GuardBuilder::new("my_program").build();
     /// # }
     /// ```
-    pub fn new(caller_name: impl Into<String>) -> Self {
+    pub fn new(caller_name: &'static str) -> Self {
         Self {
-            caller_name: caller_name.into(),
+            caller_name,
             percentiles: vec![95],
             reporter: ReporterConfig::None,
         }
@@ -391,7 +391,11 @@ impl GuardBuilder {
     }
 }
 
-fn init_hotpath(caller_name: String, percentiles: &[u8], _reporter: Box<dyn Reporter>) -> HotPath {
+fn init_hotpath(
+    caller_name: &'static str,
+    percentiles: &[u8],
+    _reporter: Box<dyn Reporter>,
+) -> HotPath {
     let percentiles = percentiles.to_vec();
 
     let arc_swap = HOTPATH_STATE.get_or_init(|| ArcSwapOption::from(None));
@@ -494,7 +498,7 @@ impl Drop for HotPath {
                         &stats,
                         total_elapsed,
                         state_guard.percentiles.clone(),
-                        state_guard.caller_name.clone(),
+                        state_guard.caller_name,
                     );
 
                     match self.reporter.report(&metrics_provider) {

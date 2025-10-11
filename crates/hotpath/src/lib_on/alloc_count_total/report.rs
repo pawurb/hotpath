@@ -9,7 +9,7 @@ pub struct StatsData<'a> {
     pub stats: &'a HashMap<&'static str, FunctionStats>,
     pub total_elapsed: Duration,
     pub percentiles: Vec<u8>,
-    pub caller_name: String,
+    pub caller_name: &'static str,
 }
 
 impl<'a> MetricsProvider<'a> for StatsData<'a> {
@@ -17,7 +17,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
         stats: &'a HashMap<&'static str, FunctionStats>,
         total_elapsed: Duration,
         percentiles: Vec<u8>,
-        caller_name: String,
+        caller_name: &'static str,
     ) -> Self {
         Self {
             stats,
@@ -108,6 +108,6 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn caller_name(&self) -> &str {
-        &self.caller_name
+        self.caller_name
     }
 }
