@@ -22,7 +22,7 @@ jobs:
           # Extract timing metrics from head branch
           {
             echo 'metrics<<EOF'
-            cargo run --example basic --features='hotpath,hotpath-ci' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            cargo run --example benchmark --features='hotpath,hotpath-ci' | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
       - id: base_timing_metrics
@@ -31,7 +31,7 @@ jobs:
           git checkout ${{ github.event.pull_request.base.ref }}
           {
             echo 'metrics<<EOF'
-            cargo run --example basic --features='hotpath,hotpath-ci' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            cargo run --example benchmark --features='hotpath,hotpath-ci' | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
           git checkout ${{ github.event.pull_request.head.ref }}
@@ -40,7 +40,7 @@ jobs:
           # Extract alloc metrics from head branch
           {
             echo 'metrics<<EOF'
-            cargo run --example basic --features='hotpath,hotpath-ci,hotpath-alloc-count-total' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            cargo run --example benchmark --features='hotpath,hotpath-ci,hotpath-alloc-count-total' | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
       - id: base_alloc_metrics
@@ -49,7 +49,7 @@ jobs:
           git checkout ${{ github.event.pull_request.base.ref }}
           {
             echo 'metrics<<EOF'
-            cargo run --example basic --features='hotpath,hotpath-ci,hotpath-alloc-count-total' -p hotpath-test-tokio-async | grep '^{"hotpath_profiling_mode"'
+            cargo run --example benchmark --features='hotpath,hotpath-ci,hotpath-alloc-count-total' | grep '^{"hotpath_profiling_mode"'
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
           git checkout ${{ github.event.pull_request.head.ref }}
