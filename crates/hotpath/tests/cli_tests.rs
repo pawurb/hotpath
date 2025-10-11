@@ -1,3 +1,4 @@
+#![cfg(not(miri))]
 #[cfg(test)]
 pub mod tests {
     use std::process::Command;

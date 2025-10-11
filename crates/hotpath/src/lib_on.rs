@@ -34,7 +34,7 @@ impl MeasurementGuard {
     pub fn build(measurement_name: &'static str, wrapper: bool) -> Self {
         #[allow(clippy::needless_bool)]
         let unsupported_async = if wrapper {
-            // top wrapper functions are not inside a runtime
+            // Top wrapper functions are not inside a runtime
             false
         } else {
             cfg_if::cfg_if! {
@@ -133,7 +133,7 @@ use std::time::Instant;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,ignore
 /// # #[cfg(feature = "hotpath")]
 /// # {
 /// use std::time::Duration;
