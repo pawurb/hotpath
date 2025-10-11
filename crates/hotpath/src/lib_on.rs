@@ -17,16 +17,11 @@ cfg_if::cfg_if! {
         // Memory allocations profiling using a custom global allocator
         #[global_allocator]
         static GLOBAL: alloc::allocator::CountingAllocator = alloc::allocator::CountingAllocator {};
-        pub use alloc::shared::NoopAsyncAllocGuard;
 
-        pub enum AllocGuardType {
-            AllocGuard(AllocGuard),
-            NoopAsyncAllocGuard(NoopAsyncAllocGuard),
-        }
     } else {
         // Time-based profiling (when no allocation features are enabled)
         mod time;
-        pub use time::guard::TimeGuard;
+        pub use time::guard::MeasurementGuard;
         pub use time::state::FunctionStats;
         use time::{
             report::StatsData,
@@ -38,7 +33,7 @@ cfg_if::cfg_if! {
 cfg_if::cfg_if! {
     if #[cfg(feature = "hotpath-alloc-bytes-total")] {
         mod alloc_bytes_total;
-        pub use alloc_bytes_total::guard::AllocGuard;
+        pub use alloc_bytes_total::guard::MeasurementGuard;
         pub use alloc_bytes_total::state::FunctionStats;
         use alloc_bytes_total::{
             report::StatsData,
@@ -46,7 +41,7 @@ cfg_if::cfg_if! {
         };
     } else if #[cfg(feature = "hotpath-alloc-count-total")] {
         mod alloc_count_total;
-        pub use alloc_count_total::guard::AllocGuard;
+        pub use alloc_count_total::guard::MeasurementGuard;
         pub use alloc_count_total::state::FunctionStats;
         use alloc_count_total::{
             report::StatsData,
@@ -130,16 +125,7 @@ use std::time::Instant;
 #[macro_export]
 macro_rules! measure_block {
     ($label:expr, $expr:expr) => {{
-        hotpath::cfg_if! {
-            if #[cfg(any(
-                feature = "hotpath-alloc-bytes-total",
-                feature = "hotpath-alloc-count-total"
-            ))] {
-                let _guard = hotpath::AllocGuard::new($label, false);
-            } else {
-                let _guard = hotpath::TimeGuard::new($label, false);
-            }
-        }
+        let _guard = hotpath::MeasurementGuard::new($label, false, false);
 
         $expr
     }};

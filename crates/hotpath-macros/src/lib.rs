@@ -181,9 +181,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                     };
 
                     hotpath::cfg_if! {
-                        if #[cfg(feature = "hotpath-off")] {
-                            // No-op when hotpath-off is enabled
-                        } else if #[cfg(any(
+                        if #[cfg(any(
                             feature = "hotpath-alloc-bytes-total",
                             feature = "hotpath-alloc-count-total"
                         ))] {
@@ -192,14 +190,14 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                             let _measure_guard = match runtime_flavor {
                                 Some(RuntimeFlavor::CurrentThread) => {
-                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(#measurement_name, true))
+                                    hotpath::MeasurementGuard::new(#measurement_name, true, false)
                                 }
                                 _ => {
-                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(#measurement_name, true))
+                                    hotpath::MeasurementGuard::new(#measurement_name, true, true)
                                 }
                             };
                         } else {
-                            let _measure_guard = hotpath::TimeGuard::new(#measurement_name, true);
+                            let _measure_guard = hotpath::MeasurementGuard::new(#measurement_name, true, false);
                         }
                     }
 
@@ -223,18 +221,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                         .build()
                 };
 
-                hotpath::cfg_if! {
-                    if #[cfg(feature = "hotpath-off")] {
-                        // No-op when hotpath-off is enabled
-                    } else if #[cfg(any(
-                        feature = "hotpath-alloc-bytes-total",
-                        feature = "hotpath-alloc-count-total"
-                    ))] {
-                        let _measure_guard = hotpath::AllocGuard::new(#measurement_name, true);
-                    } else {
-                        let _measure_guard = hotpath::TimeGuard::new(#measurement_name, true);
-                    }
-                }
+                let _measure_guard = hotpath::MeasurementGuard::new(#measurement_name, true, false);
 
                 #block
             }
@@ -308,14 +295,14 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
                             let _guard = match runtime_flavor {
                                 Some(RuntimeFlavor::CurrentThread) => {
-                                    hotpath::AllocGuardType::AllocGuard(hotpath::AllocGuard::new(concat!(module_path!(), "::", #name), false))
+                                    hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, false)
                                 }
                                 _ => {
-                                    hotpath::AllocGuardType::NoopAsyncAllocGuard(hotpath::NoopAsyncAllocGuard::new(concat!(module_path!(), "::", #name), false))
+                                    hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, true)
                                 }
                             };
                         } else {
-                            let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name), false);
+                            let _guard = hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, false);
                         }
                     }
 
@@ -326,18 +313,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     } else {
         quote! {
             #vis #sig {
-                hotpath::cfg_if! {
-                    if #[cfg(feature = "hotpath-off")] {
-                        // No-op when hotpath-off is enabled
-                    } else if #[cfg(any(
-                        feature = "hotpath-alloc-bytes-total",
-                        feature = "hotpath-alloc-count-total"
-                    ))] {
-                        let _guard = hotpath::AllocGuard::new(concat!(module_path!(), "::", #name), false);
-                    } else {
-                        let _guard = hotpath::TimeGuard::new(concat!(module_path!(), "::", #name), false);
-                    }
-                }
+                let _guard = hotpath::MeasurementGuard::new(concat!(module_path!(), "::", #name), false, false);
 
                 #block
             }

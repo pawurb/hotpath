@@ -28,7 +28,8 @@ pub mod tests {
 
             assert!(
                 output.status.success(),
-                "Process did not exit successfully: {output:?}",
+                "Process did not exit successfully.\n\nstderr:\n{}",
+                String::from_utf8_lossy(&output.stderr)
             );
 
             let all_expected = [
@@ -79,7 +80,8 @@ pub mod tests {
 
             assert!(
                 output.status.success(),
-                "Process did not exit successfully: {output:?}",
+                "Process did not exit successfully.\n\nstderr:\n{}",
+                String::from_utf8_lossy(&output.stderr)
             );
 
             let all_expected = [
@@ -141,7 +143,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let expected = ["main_empty::example_function", "main_empty::main"];
@@ -173,7 +176,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let all_expected = [
@@ -210,7 +214,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let all_expected = [
@@ -245,7 +250,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let all_expected = [
@@ -283,7 +289,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let all_expected = ["N/A*", "only available for tokio current_thread"];
@@ -313,7 +320,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let all_expected = ["i ran"];
@@ -353,7 +361,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         assert!(
@@ -399,7 +408,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -445,7 +455,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -505,7 +516,8 @@ pub mod tests {
 
         assert!(
             output.status.success(),
-            "Process did not exit successfully: {output:?}",
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
         );
 
         let stdout = String::from_utf8_lossy(&output.stdout);

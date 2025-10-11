@@ -20,11 +20,15 @@ pub fn init(_caller_name: String, _percentiles: &[u8], _format: Format) -> HotPa
     HotPath
 }
 
-pub struct HotPath;
+pub struct MeasurementGuard {}
 
-impl Drop for HotPath {
-    fn drop(&mut self) {}
+impl MeasurementGuard {
+    pub fn new(_name: &'static str, _wrapper: bool, _unsupported_async: bool) -> Self {
+        Self {}
+    }
 }
+
+pub struct HotPath;
 
 pub struct GuardBuilder {}
 

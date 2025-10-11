@@ -1,15 +1,15 @@
 use std::time::Instant;
 
 #[doc(hidden)]
-pub struct TimeGuard {
+pub struct MeasurementGuard {
     name: &'static str,
     start: Instant,
     wrapper: bool,
 }
 
-impl TimeGuard {
+impl MeasurementGuard {
     #[inline]
-    pub fn new(name: &'static str, wrapper: bool) -> Self {
+    pub fn new(name: &'static str, wrapper: bool, _unsupported_sync: bool) -> Self {
         Self {
             name,
             start: Instant::now(),
@@ -18,7 +18,7 @@ impl TimeGuard {
     }
 }
 
-impl Drop for TimeGuard {
+impl Drop for MeasurementGuard {
     #[inline]
     fn drop(&mut self) {
         let dur = self.start.elapsed();
