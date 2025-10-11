@@ -9,7 +9,6 @@ fn noop_sync_function() {
 async fn noop_async_function() {
     let vec1 = vec![1, 2, 3, 5, 6, 10];
     std::hint::black_box(vec1);
-    tokio::task::yield_now().await;
 }
 
 #[tokio::main(flavor = "current_thread")]
