@@ -165,6 +165,7 @@ It ensures that tokio runs in a `current_thread` runtime mode if any of the allo
 Attribute macro that initializes the background measurement processing when applied. Supports parameters:
 - `percentiles = [50, 95, 99]` - Custom percentiles to display
 - `format = "json"` - Output format ("table", "json", "json-pretty")
+- `limit = 20` - Maximum number of functions to display (default: 15, 0 = show all)
 
 `#[cfg_attr(feature = "hotpath", hotpath::measure)]`
 
@@ -208,6 +209,7 @@ Macro that measures the execution time of a code block with a static string labe
 **Configuration methods:**
 - `.percentiles(&[u8])` - Set custom percentiles to display (default: [95])
 - `.format(Format)` - Set output format (Table, Json, JsonPretty)
+- `.limit(usize)` - Set maximum number of functions to display (default: 15, 0 = show all)
 - `.reporter(Box<dyn Reporter>)` - Set custom reporter (overrides format)
 - `.build()` - Build and return the HotPath guard
 
@@ -215,6 +217,7 @@ Macro that measures the execution time of a code block with a static string labe
 ```rust
 let _guard = hotpath::GuardBuilder::new("main")
     .percentiles(&[50, 90, 95, 99])
+    .limit(20)
     .format(hotpath::Format::JsonPretty)
     .build();
 ```
@@ -355,10 +358,10 @@ Example JSON output:
 }
 ```
 
-You can combine both percentiles and format parameters:
+You can combine multiple parameters:
 
 ```rust
-#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json"))]
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json", limit = 10))]
 ```
 
 ## Custom Reporters
