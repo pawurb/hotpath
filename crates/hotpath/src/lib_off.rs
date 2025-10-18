@@ -23,7 +23,7 @@ impl MeasurementGuard {
         Self {}
     }
 
-    pub fn build(_name: &'static str, _wrapper: bool) -> Self {
+    pub fn build(_name: &'static str, _wrapper: bool, _is_async: bool) -> Self {
         Self {}
     }
 }
@@ -48,6 +48,10 @@ impl GuardBuilder {
     }
 
     pub fn format(self, _format: Format) -> Self {
+        self
+    }
+
+    pub fn limit(mut self, limit: usize) -> Self {
         self
     }
 

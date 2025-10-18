@@ -31,6 +31,7 @@ impl Format {
 ///
 /// * `percentiles` - Array of percentile values (0-100) to display in the report. Default: `[95]`
 /// * `format` - Output format as a string: `"table"` (default), `"json"`, or `"json-pretty"`
+/// * `limit` - Maximum number of functions to display in the report (0 = show all). Default: `15`
 ///
 /// # Examples
 ///
@@ -71,6 +72,15 @@ impl Format {
 /// }
 /// ```
 ///
+/// Custom limit (show top 20 functions):
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::main(limit = 20))]
+/// fn main() {
+///     // Your code here
+/// }
+/// ```
+///
 /// # Usage with Tokio
 ///
 /// When using with tokio, place `#[tokio::main]` before `#[hotpath::main]`:
@@ -103,6 +113,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Defaults
     let mut percentiles: Vec<u8> = vec![95];
     let mut format = Format::Table;
+    let mut limit: usize = 15;
 
     // Parse named args like: percentiles=[..], format=".."
     if !attr.is_empty() {
@@ -148,7 +159,15 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                 return Ok(());
             }
 
-            Err(meta.error("Unknown parameter. Supported: percentiles=[..], format=\"..\""))
+            if meta.path.is_ident("limit") {
+                meta.input.parse::<syn::Token![=]>()?;
+                let li: LitInt = meta.input.parse()?;
+                limit = li.base10_parse()?;
+                return Ok(());
+            }
+
+            Err(meta
+                .error("Unknown parameter. Supported: percentiles=[..], format=\"..\", limit=N"))
         });
 
         if let Err(e) = parser.parse2(proc_macro2::TokenStream::from(attr)) {
@@ -162,37 +181,33 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let asyncness = sig.asyncness.is_some();
     let fn_name = &sig.ident;
 
-    let output = if asyncness {
-        quote! {
-            #vis #sig {
-                async {
-                    let _hotpath = {
-                        let caller_name: &'static str = concat!(module_path!(), "::", stringify!(#fn_name));
+    let guard_init = quote! {
+        let _hotpath = {
+            let caller_name: &'static str =
+                concat!(module_path!(), "::", stringify!(#fn_name));
 
-                        hotpath::GuardBuilder::new(caller_name)
-                            .percentiles(#percentiles_array)
-                            .format(#format_token)
-                            .build()
-                    };
+            hotpath::GuardBuilder::new(caller_name)
+                .percentiles(#percentiles_array)
+                .limit(#limit)
+                .format(#format_token)
+                .build()
+        };
+    };
 
-                    #block
-                }.await
-            }
-        }
+    let body = quote! {
+        #guard_init
+        #block
+    };
+
+    let wrapped_body = if asyncness {
+        quote! { async { #body }.await }
     } else {
-        quote! {
-            #vis #sig {
-                let _hotpath = {
-                    let caller_name: &'static str = concat!(module_path!(), "::", stringify!(#fn_name));
+        body
+    };
 
-                    hotpath::GuardBuilder::new(caller_name)
-                        .percentiles(#percentiles_array)
-                        .format(#format_token)
-                        .build()
-                };
-
-                #block
-            }
+    let output = quote! {
+        #vis #sig {
+            #wrapped_body
         }
     };
 
@@ -247,23 +262,24 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let name = sig.ident.to_string();
     let asyncness = sig.asyncness.is_some();
 
-    let output = if asyncness {
-        quote! {
-            #vis #sig {
-                async {
-                    let _guard = hotpath::MeasurementGuard::build(concat!(module_path!(), "::", #name), false);
+    let guard_init = quote! {
+        let _guard = hotpath::MeasurementGuard::build(
+            concat!(module_path!(), "::", #name),
+            false,
+            #asyncness
+        );
+        #block
+    };
 
-                    #block
-                }.await
-            }
-        }
+    let wrapped = if asyncness {
+        quote! { async { #guard_init }.await }
     } else {
-        quote! {
-            #vis #sig {
-                let _guard = hotpath::MeasurementGuard::build(concat!(module_path!(), "::", #name), false);
+        guard_init
+    };
 
-                #block
-            }
+    let output = quote! {
+        #vis #sig {
+            #wrapped
         }
     };
 

@@ -31,7 +31,7 @@ cfg_if::cfg_if! {
 }
 
 impl MeasurementGuard {
-    pub fn build(measurement_name: &'static str, wrapper: bool) -> Self {
+    pub fn build(measurement_name: &'static str, wrapper: bool, _is_async: bool) -> Self {
         #[allow(clippy::needless_bool)]
         let unsupported_async = if wrapper {
             // top wrapper functions are not inside a runtime
@@ -42,13 +42,16 @@ impl MeasurementGuard {
                     feature = "hotpath-alloc-bytes-total",
                     feature = "hotpath-alloc-count-total"
                 ))] {
-                    use tokio::runtime::{Handle, RuntimeFlavor};
-
-                    let runtime_flavor = Handle::try_current()
-                        .ok()
-                        .map(|h| h.runtime_flavor());
-
-                    !matches!(runtime_flavor, Some(RuntimeFlavor::CurrentThread))
+                    // For allocation profiling: mark async as unsupported unless
+                    // running on Tokio CurrentThread. Non-Tokio runtimes are unsupported.
+                    if _is_async {
+                        match Handle::try_current() {
+                            Ok(h) => h.runtime_flavor() != RuntimeFlavor::CurrentThread,
+                            Err(_) => true,
+                        }
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }
@@ -253,6 +256,7 @@ pub struct GuardBuilder {
     caller_name: &'static str,
     percentiles: Vec<u8>,
     reporter: ReporterConfig,
+    limit: usize,
 }
 
 enum ReporterConfig {
@@ -285,6 +289,7 @@ impl GuardBuilder {
             caller_name,
             percentiles: vec![95],
             reporter: ReporterConfig::None,
+            limit: 15,
         }
     }
 
@@ -314,6 +319,34 @@ impl GuardBuilder {
     /// ```
     pub fn percentiles(mut self, percentiles: &[u8]) -> Self {
         self.percentiles = percentiles.to_vec();
+        self
+    }
+
+    /// Sets the maximum number of functions to display in the profiling report.
+    ///
+    /// The report will show only the top N functions sorted by total execution time
+    /// (or total allocations when using allocation profiling features).
+    ///
+    /// Default: `15`
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of functions to display (0 means show all)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[cfg(feature = "hotpath")]
+    /// # {
+    /// use hotpath::GuardBuilder;
+    ///
+    /// let _guard = GuardBuilder::new("main")
+    ///     .limit(20)
+    ///     .build();
+    /// # }
+    /// ```
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
         self
     }
 
@@ -416,7 +449,7 @@ impl GuardBuilder {
             ReporterConfig::None => Box::new(output::TableReporter),
         };
 
-        HotPath::new(self.caller_name, &self.percentiles, reporter)
+        HotPath::new(self.caller_name, &self.percentiles, self.limit, reporter)
     }
 }
 
@@ -424,6 +457,7 @@ impl HotPath {
     pub fn new(
         caller_name: &'static str,
         percentiles: &[u8],
+        limit: usize,
         _reporter: Box<dyn Reporter>,
     ) -> Self {
         let percentiles = percentiles.to_vec();
@@ -446,6 +480,7 @@ impl HotPath {
             start_time,
             caller_name,
             percentiles,
+            limit,
         }));
 
         thread::Builder::new()
@@ -487,7 +522,7 @@ impl HotPath {
         #[cfg(not(feature = "hotpath-ci"))]
         let reporter = _reporter;
 
-        let wrapper_guard = MeasurementGuard::build(caller_name, true);
+        let wrapper_guard = MeasurementGuard::build(caller_name, true, false);
 
         Self {
             state: Arc::clone(&state_arc),
@@ -537,6 +572,7 @@ impl Drop for HotPath {
                         total_elapsed,
                         state_guard.percentiles.clone(),
                         state_guard.caller_name,
+                        state_guard.limit,
                     );
 
                     match self.reporter.report(&metrics_provider) {
