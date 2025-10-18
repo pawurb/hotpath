@@ -31,7 +31,7 @@ cfg_if::cfg_if! {
 }
 
 impl MeasurementGuard {
-    pub fn build(measurement_name: &'static str, wrapper: bool) -> Self {
+    pub fn build(measurement_name: &'static str, wrapper: bool, _is_async: bool) -> Self {
         #[allow(clippy::needless_bool)]
         let unsupported_async = if wrapper {
             // top wrapper functions are not inside a runtime
@@ -42,13 +42,16 @@ impl MeasurementGuard {
                     feature = "hotpath-alloc-bytes-total",
                     feature = "hotpath-alloc-count-total"
                 ))] {
-                    use tokio::runtime::{Handle, RuntimeFlavor};
-
-                    let runtime_flavor = Handle::try_current()
-                        .ok()
-                        .map(|h| h.runtime_flavor());
-
-                    !matches!(runtime_flavor, Some(RuntimeFlavor::CurrentThread))
+                    // For allocation profiling: mark async as unsupported unless
+                    // running on Tokio CurrentThread. Non-Tokio runtimes are unsupported.
+                    if _is_async {
+                        match Handle::try_current() {
+                            Ok(h) => h.runtime_flavor() != RuntimeFlavor::CurrentThread,
+                            Err(_) => true,
+                        }
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 }
@@ -519,7 +522,7 @@ impl HotPath {
         #[cfg(not(feature = "hotpath-ci"))]
         let reporter = _reporter;
 
-        let wrapper_guard = MeasurementGuard::build(caller_name, true);
+        let wrapper_guard = MeasurementGuard::build(caller_name, true, false);
 
         Self {
             state: Arc::clone(&state_arc),

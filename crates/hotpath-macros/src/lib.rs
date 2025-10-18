@@ -265,7 +265,8 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let guard_init = quote! {
         let _guard = hotpath::MeasurementGuard::build(
             concat!(module_path!(), "::", #name),
-            false
+            false,
+            #asyncness
         );
         #block
     };

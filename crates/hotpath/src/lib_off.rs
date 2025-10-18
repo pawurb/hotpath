@@ -23,7 +23,7 @@ impl MeasurementGuard {
         Self {}
     }
 
-    pub fn build(_name: &'static str, _wrapper: bool) -> Self {
+    pub fn build(_name: &'static str, _wrapper: bool, _is_async: bool) -> Self {
         Self {}
     }
 }

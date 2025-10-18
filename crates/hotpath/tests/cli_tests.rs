@@ -644,7 +644,7 @@ pub mod tests {
                 "--example",
                 "limit",
                 "--features",
-                "hotpath",
+                "hotpath,hotpath-alloc-bytes-total",
             ])
             .output()
             .expect("Failed to execute command");
@@ -660,8 +660,8 @@ pub mod tests {
         let expected_content = [
             "(3/4)",
             "limit::main",
-            "limit::function_one",
-            "limit::function_two",
+            "measured_module::function_one",
+            "measured_module::function_two",
         ];
 
         for expected in expected_content {
@@ -671,7 +671,7 @@ pub mod tests {
             );
         }
 
-        let not_expected_content = ["limit::function_three"];
+        let not_expected_content = ["limit::function_three", "N/A*"];
 
         for expected in not_expected_content {
             assert!(
