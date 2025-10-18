@@ -606,6 +606,7 @@ pub trait MetricsProvider<'a> {
         total_elapsed: Duration,
         percentiles: Vec<u8>,
         caller_name: &'static str,
+        limit: usize,
     ) -> Self
     where
         Self: Sized;

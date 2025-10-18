@@ -95,6 +95,7 @@ pub(crate) struct HotPathState {
     pub start_time: Instant,
     pub caller_name: &'static str,
     pub percentiles: Vec<u8>,
+    pub limit: usize,
 }
 
 pub(crate) fn process_measurement(

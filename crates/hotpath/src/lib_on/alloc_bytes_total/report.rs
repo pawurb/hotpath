@@ -10,6 +10,7 @@ pub struct StatsData<'a> {
     pub total_elapsed: Duration,
     pub percentiles: Vec<u8>,
     pub caller_name: &'static str,
+    pub limit: usize,
 }
 
 impl<'a> MetricsProvider<'a> for StatsData<'a> {
@@ -18,12 +19,14 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
         total_elapsed: Duration,
         percentiles: Vec<u8>,
         caller_name: &'static str,
+        limit: usize,
     ) -> Self {
         Self {
             stats,
             total_elapsed,
             percentiles,
             caller_name,
+            limit,
         }
     }
 
@@ -44,16 +47,25 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {
-        let filtered_stats: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
+        let mut filtered_stats: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
 
-        // Find wrapper function's total bytes if it exists
+        filtered_stats.sort_by(|a, b| b.1.total_bytes().cmp(&a.1.total_bytes()));
+
+        let filtered_stats = if self.limit > 0 {
+            filtered_stats
+                .into_iter()
+                .take(self.limit)
+                .collect::<Vec<_>>()
+        } else {
+            filtered_stats
+        };
+
         let wrapper_total_bytes = self
             .stats
             .iter()
             .find(|(_, s)| s.wrapper)
             .map(|(_, s)| s.total_bytes());
 
-        // Use wrapper's total if available, otherwise sum all functions
         let grand_total_bytes: u64 = wrapper_total_bytes.unwrap_or_else(|| {
             filtered_stats
                 .iter()

@@ -11,6 +11,7 @@ pub struct StatsData<'a> {
     pub total_elapsed: Duration,
     pub percentiles: Vec<u8>,
     pub caller_name: &'static str,
+    pub limit: usize,
 }
 
 impl<'a> MetricsProvider<'a> for StatsData<'a> {
@@ -19,12 +20,14 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
         total_elapsed: Duration,
         percentiles: Vec<u8>,
         caller_name: &'static str,
+        limit: usize,
     ) -> Self {
         Self {
             stats,
             total_elapsed,
             percentiles,
             caller_name,
+            limit,
         }
     }
 
@@ -41,19 +44,26 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {
-        // Find wrapper function's total value if it exists
         let wrapper_total = self
             .stats
             .iter()
             .find(|(_, s)| s.wrapper)
             .map(|(_, s)| s.total_duration_ns);
 
-        // Use wrapper's total if available, otherwise use total_elapsed
         let reference_total = wrapper_total.unwrap_or(self.total_elapsed.as_nanos() as u64);
 
-        self.stats
-            .iter()
-            .filter(|(_, s)| s.has_data)
+        let mut entries: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
+
+        entries.sort_by(|a, b| b.1.total_duration_ns.cmp(&a.1.total_duration_ns));
+
+        let entries = if self.limit > 0 {
+            entries.into_iter().take(self.limit).collect::<Vec<_>>()
+        } else {
+            entries
+        };
+
+        entries
+            .into_iter()
             .map(|(function_name, stats)| {
                 let short_name = format_function_name(function_name);
 

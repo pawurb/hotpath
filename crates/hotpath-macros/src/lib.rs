@@ -31,6 +31,7 @@ impl Format {
 ///
 /// * `percentiles` - Array of percentile values (0-100) to display in the report. Default: `[95]`
 /// * `format` - Output format as a string: `"table"` (default), `"json"`, or `"json-pretty"`
+/// * `limit` - Maximum number of functions to display in the report (0 = show all). Default: `15`
 ///
 /// # Examples
 ///
@@ -71,6 +72,15 @@ impl Format {
 /// }
 /// ```
 ///
+/// Custom limit (show top 20 functions):
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::main(limit = 20))]
+/// fn main() {
+///     // Your code here
+/// }
+/// ```
+///
 /// # Usage with Tokio
 ///
 /// When using with tokio, place `#[tokio::main]` before `#[hotpath::main]`:
@@ -103,6 +113,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Defaults
     let mut percentiles: Vec<u8> = vec![95];
     let mut format = Format::Table;
+    let mut limit: usize = 15;
 
     // Parse named args like: percentiles=[..], format=".."
     if !attr.is_empty() {
@@ -148,7 +159,15 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                 return Ok(());
             }
 
-            Err(meta.error("Unknown parameter. Supported: percentiles=[..], format=\"..\""))
+            if meta.path.is_ident("limit") {
+                meta.input.parse::<syn::Token![=]>()?;
+                let li: LitInt = meta.input.parse()?;
+                limit = li.base10_parse()?;
+                return Ok(());
+            }
+
+            Err(meta
+                .error("Unknown parameter. Supported: percentiles=[..], format=\"..\", limit=N"))
         });
 
         if let Err(e) = parser.parse2(proc_macro2::TokenStream::from(attr)) {
@@ -171,6 +190,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                         hotpath::GuardBuilder::new(caller_name)
                             .percentiles(#percentiles_array)
+                            .limit(#limit)
                             .format(#format_token)
                             .build()
                     };
@@ -187,6 +207,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                     hotpath::GuardBuilder::new(caller_name)
                         .percentiles(#percentiles_array)
+                        .limit(#limit)
                         .format(#format_token)
                         .build()
                 };

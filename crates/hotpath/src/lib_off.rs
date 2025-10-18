@@ -51,6 +51,10 @@ impl GuardBuilder {
         self
     }
 
+    pub fn limit(mut self, limit: usize) -> Self {
+        self
+    }
+
     pub fn build(self) -> HotPath {
         HotPath
     }
