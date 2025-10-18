@@ -286,6 +286,34 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     output.into()
 }
 
+/// Marks a function to be excluded from profiling when used with [`measure_all`](macro@measure_all).
+///
+/// # Usage
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+/// impl MyStruct {
+///     fn important_method(&self) {
+///         // This will be measured
+///     }
+///
+///     #[cfg_attr(feature = "hotpath", hotpath::skip)]
+///     fn not_so_important_method(&self) -> usize {
+///         // This will NOT be measured
+///         self.value
+///     }
+/// }
+/// ```
+///
+/// # See Also
+///
+/// * [`measure_all`](macro@measure_all) - Bulk instrumentation macro
+/// * [`measure`](macro@measure) - Individual function instrumentation
+#[proc_macro_attribute]
+pub fn skip(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
 /// Instruments all functions in a module or impl block with the `measure` profiling macro.
 ///
 /// This attribute macro applies the [`measure`](macro@measure) macro to every function
@@ -330,6 +358,7 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// * [`measure`](macro@measure) - Attribute macro for instrumenting individual functions
 /// * [`main`](macro@main) - Attribute macro that initializes profiling
+/// * [`skip`](macro@skip) - Marker to exclude specific functions from measurement
 #[proc_macro_attribute]
 pub fn measure_all(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let parsed_item = parse_macro_input!(item as Item);
@@ -339,9 +368,11 @@ pub fn measure_all(_attr: TokenStream, item: TokenStream) -> TokenStream {
             if let Some((_brace, items)) = &mut module.content {
                 for it in items.iter_mut() {
                     if let Item::Fn(func) = it {
-                        let func_tokens = TokenStream::from(quote!(#func));
-                        let transformed = measure(TokenStream::new(), func_tokens);
-                        *func = syn::parse_macro_input!(transformed as ItemFn);
+                        if !has_hotpath_skip(&func.attrs) {
+                            let func_tokens = TokenStream::from(quote!(#func));
+                            let transformed = measure(TokenStream::new(), func_tokens);
+                            *func = syn::parse_macro_input!(transformed as ItemFn);
+                        }
                     }
                 }
             }
@@ -350,13 +381,38 @@ pub fn measure_all(_attr: TokenStream, item: TokenStream) -> TokenStream {
         Item::Impl(mut impl_block) => {
             for item in impl_block.items.iter_mut() {
                 if let ImplItem::Fn(method) = item {
-                    let func_tokens = TokenStream::from(quote!(#method));
-                    let transformed = measure(TokenStream::new(), func_tokens);
-                    *method = syn::parse_macro_input!(transformed as syn::ImplItemFn);
+                    if !has_hotpath_skip(&method.attrs) {
+                        let func_tokens = TokenStream::from(quote!(#method));
+                        let transformed = measure(TokenStream::new(), func_tokens);
+                        *method = syn::parse_macro_input!(transformed as syn::ImplItemFn);
+                    }
                 }
             }
             TokenStream::from(quote!(#impl_block))
         }
         _ => panic!("measure_all can only be applied to modules or impl blocks"),
     }
+}
+
+fn has_hotpath_skip(attrs: &[syn::Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        // Check for #[skip] or #[hotpath::skip]
+        if attr.path().is_ident("skip")
+            || (attr.path().segments.len() == 2
+                && attr.path().segments[0].ident == "hotpath"
+                && attr.path().segments[1].ident == "skip")
+        {
+            return true;
+        }
+
+        // Check for #[cfg_attr(feature = "hotpath", hotpath::skip)]
+        if attr.path().is_ident("cfg_attr") {
+            let attr_str = quote!(#attr).to_string();
+            if attr_str.contains("hotpath") && attr_str.contains("skip") {
+                return true;
+            }
+        }
+
+        false
+    })
 }

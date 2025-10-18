@@ -160,18 +160,18 @@ It ensures that tokio runs in a `current_thread` runtime mode if any of the allo
 
 ### Macros
 
-`#[cfg_attr(feature = "hotpath", hotpath::main)]`
+#### `#[hotpath::main]`
 
 Attribute macro that initializes the background measurement processing when applied. Supports parameters:
 - `percentiles = [50, 95, 99]` - Custom percentiles to display
 - `format = "json"` - Output format ("table", "json", "json-pretty")
 - `limit = 20` - Maximum number of functions to display (default: 15, 0 = show all)
 
-`#[cfg_attr(feature = "hotpath", hotpath::measure)]`
+#### `#[hotpath::measure]`
 
 An opt-in attribute macro that instruments functions to send timing measurements to the background processor.
 
-`#[cfg_attr(feature = "hotpath", hotpath::measure_all)]`
+#### `#[hotpath::measure_all]`
 
 An attribute macro that applies `#[measure]` to all functions in a `mod` or `impl` block. Useful for bulk instrumentation without annotating each function individually. Can be used on:
 - **Inline module declarations** - Instruments all functions within the module
@@ -196,9 +196,25 @@ mod math_operations {
 }
 ```
 
-> **Note:** Once Rust stabilizes [`#![feature(proc_macro_hygiene)]`](https://doc.rust-lang.org/beta/unstable-book/language-features/proc-macro-hygiene.html?highlight=proc_macro_hygiene#proc_macro_hygiene) and [`#![feature(custom_inner_attributes)]`](https://doc.rust-lang.org/beta/unstable-book/language-features/custom-inner-attributes.html), it will be possible to use `#![measure_all]` as an inner attribute directly inside module files (e.g., at the top of `math_operations.rs`) to automatically instrument all functions in that module without needing to annotate the module declaration.
+> **Note:** Once Rust stabilizes [`#![feature(proc_macro_hygiene)]`](https://doc.rust-lang.org/beta/unstable-book/language-features/proc-macro-hygiene.html?highlight=proc_macro_hygiene#proc_macro_hygiene) and [`#![feature(custom_inner_attributes)]`](https://doc.rust-lang.org/beta/unstable-book/language-features/custom-inner-attributes.html), it will be possible to use `#![measure_all]` as an inner attribute directly inside module files (e.g., at the top of `math_operations.rs`) to automatically instrument all functions in that module.
 
-`hotpath::measure_block!(label, expr)`
+#### `#[hotpath::skip]`
+
+A marker attribute that excludes specific functions from instrumentation when used within a module or impl block annotated with `#[measure_all]`. The function executes normally but doesn't send measurements to the profiling system.
+
+Example:
+
+```rust
+#[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+mod operations {
+    pub fn important_function() { /* ... */ } // Measured
+
+    #[cfg_attr(feature = "hotpath", hotpath::skip)]
+    pub fn not_so_important_function() { /* ... */ } // NOT measured
+}
+```
+
+#### `hotpath::measure_block!(label, expr)`
 
 Macro that measures the execution time of a code block with a static string label.
 
@@ -375,7 +391,7 @@ For complete working examples, see:
 
 ## Benchmarking
 
-Measure overhead of profiling 100k method calls with [hyperfine](https://github.com/sharkdp/hyperfine):
+Measure overhead of profiling 10k method calls with [hyperfine](https://github.com/sharkdp/hyperfine):
 
 Timing:
 ```

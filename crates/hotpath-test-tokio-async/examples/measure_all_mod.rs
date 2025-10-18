@@ -9,6 +9,7 @@ mod measured_module {
         std::thread::sleep(Duration::from_nanos(sleep));
     }
 
+    #[cfg_attr(feature = "hotpath", hotpath::skip)]
     pub fn sync_function_two(sleep: u64) {
         let vec = vec![6, 7, 8, 9, 10];
         std::hint::black_box(&vec);
@@ -23,6 +24,7 @@ mod measured_module {
         tokio::time::sleep(Duration::from_nanos(sleep)).await;
     }
 
+    #[cfg_attr(feature = "hotpath", hotpath::skip)]
     pub async fn async_function_two(sleep: u64) {
         let vec = vec![4, 5, 6];
         std::hint::black_box(&vec);

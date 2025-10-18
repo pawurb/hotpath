@@ -1,5 +1,5 @@
 pub use cfg_if::cfg_if;
-pub use hotpath_macros::{main, measure};
+pub use hotpath_macros::{main, measure, skip};
 
 #[macro_export]
 macro_rules! measure_block {

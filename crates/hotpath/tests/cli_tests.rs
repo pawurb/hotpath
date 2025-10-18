@@ -579,9 +579,7 @@ pub mod tests {
 
         let expected_content = [
             "measured_module::sync_function_one",
-            "measured_module::sync_function_two",
             "measured_module::async_function_one",
-            "measured_module::async_function_two",
             "measure_all_mod::main",
         ];
 
@@ -590,6 +588,18 @@ pub mod tests {
             assert!(
                 stdout.contains(expected),
                 "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+
+        let not_expected_content = [
+            "measured_module::sync_function_two",
+            "measured_module::async_function_two",
+        ];
+
+        for not_expected in not_expected_content {
+            assert!(
+                !stdout.contains(not_expected),
+                "Not expected:\n{not_expected}\n\nGot:\n{stdout}",
             );
         }
     }
@@ -673,10 +683,10 @@ pub mod tests {
 
         let not_expected_content = ["limit::function_three", "N/A*"];
 
-        for expected in not_expected_content {
+        for not_expected in not_expected_content {
             assert!(
-                !stdout.contains(expected),
-                "Expected:\n{expected}\n\nGot:\n{stdout}"
+                !stdout.contains(not_expected),
+                "Not expected:\n{not_expected}\n\nGot:\n{stdout}"
             );
         }
     }
