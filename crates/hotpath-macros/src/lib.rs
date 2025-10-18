@@ -181,39 +181,33 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let asyncness = sig.asyncness.is_some();
     let fn_name = &sig.ident;
 
-    let output = if asyncness {
-        quote! {
-            #vis #sig {
-                async {
-                    let _hotpath = {
-                        let caller_name: &'static str = concat!(module_path!(), "::", stringify!(#fn_name));
+    let guard_init = quote! {
+        let _hotpath = {
+            let caller_name: &'static str =
+                concat!(module_path!(), "::", stringify!(#fn_name));
 
-                        hotpath::GuardBuilder::new(caller_name)
-                            .percentiles(#percentiles_array)
-                            .limit(#limit)
-                            .format(#format_token)
-                            .build()
-                    };
+            hotpath::GuardBuilder::new(caller_name)
+                .percentiles(#percentiles_array)
+                .limit(#limit)
+                .format(#format_token)
+                .build()
+        };
+    };
 
-                    #block
-                }.await
-            }
-        }
+    let body = quote! {
+        #guard_init
+        #block
+    };
+
+    let wrapped_body = if asyncness {
+        quote! { async { #body }.await }
     } else {
-        quote! {
-            #vis #sig {
-                let _hotpath = {
-                    let caller_name: &'static str = concat!(module_path!(), "::", stringify!(#fn_name));
+        body
+    };
 
-                    hotpath::GuardBuilder::new(caller_name)
-                        .percentiles(#percentiles_array)
-                        .limit(#limit)
-                        .format(#format_token)
-                        .build()
-                };
-
-                #block
-            }
+    let output = quote! {
+        #vis #sig {
+            #wrapped_body
         }
     };
 
@@ -268,23 +262,23 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let name = sig.ident.to_string();
     let asyncness = sig.asyncness.is_some();
 
-    let output = if asyncness {
-        quote! {
-            #vis #sig {
-                async {
-                    let _guard = hotpath::MeasurementGuard::build(concat!(module_path!(), "::", #name), false);
+    let guard_init = quote! {
+        let _guard = hotpath::MeasurementGuard::build(
+            concat!(module_path!(), "::", #name),
+            false
+        );
+        #block
+    };
 
-                    #block
-                }.await
-            }
-        }
+    let wrapped = if asyncness {
+        quote! { async { #guard_init }.await }
     } else {
-        quote! {
-            #vis #sig {
-                let _guard = hotpath::MeasurementGuard::build(concat!(module_path!(), "::", #name), false);
+        guard_init
+    };
 
-                #block
-            }
+    let output = quote! {
+        #vis #sig {
+            #wrapped
         }
     };
 
