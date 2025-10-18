@@ -496,11 +496,24 @@ pub(crate) fn display_table(metrics_provider: &dyn MetricsProvider<'_>) {
         metrics_provider.profiling_mode(),
         metrics_provider.description()
     );
-    println!(
-        "{}: {:.2?}",
-        metrics_provider.caller_name().yellow().bold(),
-        Duration::from_nanos(metrics_provider.total_elapsed()),
-    );
+
+    let (displayed, total) = metrics_provider.entry_counts();
+    if displayed < total {
+        println!(
+            "{}: {:.2?} ({}/{})",
+            metrics_provider.caller_name().yellow().bold(),
+            Duration::from_nanos(metrics_provider.total_elapsed()),
+            displayed,
+            total
+        );
+    } else {
+        println!(
+            "{}: {:.2?}",
+            metrics_provider.caller_name().yellow().bold(),
+            Duration::from_nanos(metrics_provider.total_elapsed()),
+        );
+    }
+
     table.printstd();
 
     if metrics_provider.has_unsupported_async() {
@@ -600,6 +613,8 @@ pub trait MetricsProvider<'a> {
     fn has_unsupported_async(&self) -> bool {
         false // Default implementation for time-based measurements
     }
+
+    fn entry_counts(&self) -> (usize, usize);
 
     fn new(
         stats: &'a HashMap<&'static str, FunctionStats>,

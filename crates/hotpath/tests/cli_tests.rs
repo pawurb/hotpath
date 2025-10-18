@@ -633,4 +633,51 @@ pub mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_limit_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "limit",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        let expected_content = [
+            "(3/4)",
+            "limit::main",
+            "limit::function_one",
+            "limit::function_two",
+        ];
+
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+
+        let not_expected_content = ["limit::function_three"];
+
+        for expected in not_expected_content {
+            assert!(
+                !stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}"
+            );
+        }
+    }
 }

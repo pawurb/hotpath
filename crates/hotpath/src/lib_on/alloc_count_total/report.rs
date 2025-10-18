@@ -122,4 +122,16 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     fn caller_name(&self) -> &str {
         self.caller_name
     }
+
+    fn entry_counts(&self) -> (usize, usize) {
+        let total_count = self.stats.iter().filter(|(_, s)| s.has_data).count();
+
+        let displayed_count = if self.limit > 0 && self.limit < total_count {
+            self.limit
+        } else {
+            total_count
+        };
+
+        (displayed_count, total_count)
+    }
 }
