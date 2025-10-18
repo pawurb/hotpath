@@ -3,7 +3,7 @@ use crate::output::MetricsProvider;
 
 #[doc(hidden)]
 pub use cfg_if::cfg_if;
-pub use hotpath_macros::{main, measure};
+pub use hotpath_macros::{main, measure, measure_all};
 
 cfg_if::cfg_if! {
     if #[cfg(any(

@@ -1,7 +1,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::Parser;
-use syn::{parse_macro_input, ItemFn, LitInt, LitStr};
+use syn::{parse_macro_input, ImplItem, Item, ItemFn, LitInt, LitStr};
 
 #[derive(Clone, Copy)]
 enum Format {
@@ -268,4 +268,79 @@ pub fn measure(_attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     output.into()
+}
+
+/// Instruments all functions in a module or impl block with the `measure` profiling macro.
+///
+/// This attribute macro applies the [`measure`](macro@measure) macro to every function
+/// in the annotated module or impl block, providing bulk instrumentation without needing
+/// to annotate each function individually.
+///
+/// # Usage
+///
+/// On modules:
+///
+/// ```rust,no_run
+/// #[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+/// mod my_module {
+///     fn function_one() {
+///         // This will be automatically measured
+///     }
+///
+///     fn function_two() {
+///         // This will also be automatically measured
+///     }
+/// }
+/// ```
+///
+/// On impl blocks:
+///
+/// ```rust,no_run
+/// struct MyStruct;
+///
+/// #[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+/// impl MyStruct {
+///     fn method_one(&self) {
+///         // This will be automatically measured
+///     }
+///
+///     fn method_two(&self) {
+///         // This will also be automatically measured
+///     }
+/// }
+/// ```
+///
+/// # See Also
+///
+/// * [`measure`](macro@measure) - Attribute macro for instrumenting individual functions
+/// * [`main`](macro@main) - Attribute macro that initializes profiling
+#[proc_macro_attribute]
+pub fn measure_all(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let parsed_item = parse_macro_input!(item as Item);
+
+    match parsed_item {
+        Item::Mod(mut module) => {
+            if let Some((_brace, items)) = &mut module.content {
+                for it in items.iter_mut() {
+                    if let Item::Fn(func) = it {
+                        let func_tokens = TokenStream::from(quote!(#func));
+                        let transformed = measure(TokenStream::new(), func_tokens);
+                        *func = syn::parse_macro_input!(transformed as ItemFn);
+                    }
+                }
+            }
+            TokenStream::from(quote!(#module))
+        }
+        Item::Impl(mut impl_block) => {
+            for item in impl_block.items.iter_mut() {
+                if let ImplItem::Fn(method) = item {
+                    let func_tokens = TokenStream::from(quote!(#method));
+                    let transformed = measure(TokenStream::new(), func_tokens);
+                    *method = syn::parse_macro_input!(transformed as syn::ImplItemFn);
+                }
+            }
+            TokenStream::from(quote!(#impl_block))
+        }
+        _ => panic!("measure_all can only be applied to modules or impl blocks"),
+    }
 }

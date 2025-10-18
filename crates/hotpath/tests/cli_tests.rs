@@ -555,4 +555,82 @@ pub mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_measure_all_mod_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "measure_all_mod",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let expected_content = [
+            "measured_module::sync_function_one",
+            "measured_module::sync_function_two",
+            "measured_module::async_function_one",
+            "measured_module::async_function_two",
+            "measure_all_mod::main",
+        ];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_measure_all_impl_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "measure_all_impl",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let expected_content = [
+            "measure_all_impl::new",
+            "measure_all_impl::add",
+            "measure_all_impl::multiply",
+            "measure_all_impl::async_increment",
+            "measure_all_impl::async_decrement",
+            "measure_all_impl::get_value",
+            "measure_all_impl::main",
+        ];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
 }

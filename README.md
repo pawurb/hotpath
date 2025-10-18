@@ -170,6 +170,33 @@ Attribute macro that initializes the background measurement processing when appl
 
 An opt-in attribute macro that instruments functions to send timing measurements to the background processor.
 
+`#[cfg_attr(feature = "hotpath", hotpath::measure_all)]`
+
+An attribute macro that applies `#[measure]` to all functions in a `mod` or `impl` block. Useful for bulk instrumentation without annotating each function individually. Can be used on:
+- **Inline module declarations** - Instruments all functions within the module
+- **Impl blocks** - Instruments all methods in the implementation
+
+Example:
+
+```rust
+// Measure all methods in an impl block
+#[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+impl Calculator {
+    fn add(&self, a: u64, b: u64) -> u64 { a + b }
+    fn multiply(&self, a: u64, b: u64) -> u64 { a * b }
+    async fn async_compute(&self) -> u64 { /* ... */ }
+}
+
+// Measure all functions in a module
+#[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+mod math_operations {
+    pub fn complex_calculation(x: f64) -> f64 { /* ... */ }
+    pub async fn fetch_data() -> Vec<u8> { /* ... */ }
+}
+```
+
+> **Note:** Once Rust stabilizes [`#![feature(proc_macro_hygiene)]`](https://doc.rust-lang.org/beta/unstable-book/language-features/proc-macro-hygiene.html?highlight=proc_macro_hygiene#proc_macro_hygiene) and [`#![feature(custom_inner_attributes)]`](https://doc.rust-lang.org/beta/unstable-book/language-features/custom-inner-attributes.html), it will be possible to use `#![measure_all]` as an inner attribute directly inside module files (e.g., at the top of `math_operations.rs`) to automatically instrument all functions in that module without needing to annotate the module declaration.
+
 `hotpath::measure_block!(label, expr)`
 
 Macro that measures the execution time of a code block with a static string label.
