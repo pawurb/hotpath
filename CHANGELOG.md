@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2025-10-18
+
+### 🚀 Features
+
+- Add measure_all macro
+- Add configurable limit and bugfixes
+- Add hotpath::skip macro
+
+### 🚜 Refactor
+
+- Simplify measurement guards logic
+- Use static str for caller_name
+- Unify guards build logic
+
+### ⚡ Performance
+
+- Dont yield in benchmark example
+- Use quanta on linux platforms
+
+### ⚙️ Miscellaneous Tasks
+
+- Use benchmark example for hotpath CI
+- Release v0.5.0
+
 ## [0.4.1] - 2025-10-06
 
 ### 🚀 Features
