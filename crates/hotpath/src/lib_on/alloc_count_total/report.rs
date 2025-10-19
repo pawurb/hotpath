@@ -43,7 +43,15 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        "Total number of heap allocations during each function call.".to_string()
+        #[cfg(feature = "hotpath-alloc-self")]
+        {
+            "Exclusive heap allocations by each function (excluding nested calls).".to_string()
+        }
+        #[cfg(not(feature = "hotpath-alloc-self"))]
+        {
+            "Total number of heap allocations during each function call (including nested calls)."
+                .to_string()
+        }
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {
@@ -60,18 +68,30 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
             filtered_stats
         };
 
-        let wrapper_total_count = self
-            .stats
-            .iter()
-            .find(|(_, s)| s.wrapper)
-            .map(|(_, s)| s.total_count());
-
-        let grand_total_count: u64 = wrapper_total_count.unwrap_or_else(|| {
-            filtered_stats
+        #[cfg(feature = "hotpath-alloc-self")]
+        let grand_total_count: u64 = {
+            self.stats
                 .iter()
+                .filter(|(_, s)| s.has_data)
                 .map(|(_, stats)| stats.total_count())
                 .sum()
-        });
+        };
+
+        #[cfg(not(feature = "hotpath-alloc-self"))]
+        let grand_total_count: u64 = {
+            let wrapper_total_count = self
+                .stats
+                .iter()
+                .find(|(_, s)| s.wrapper)
+                .map(|(_, s)| s.total_count());
+
+            wrapper_total_count.unwrap_or_else(|| {
+                filtered_stats
+                    .iter()
+                    .map(|(_, stats)| stats.total_count())
+                    .sum()
+            })
+        };
 
         filtered_stats
             .into_iter()

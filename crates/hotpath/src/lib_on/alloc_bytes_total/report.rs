@@ -35,7 +35,15 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        "Cumulative bytes allocated during each function call.".to_string()
+        #[cfg(feature = "hotpath-alloc-self")]
+        {
+            "Exclusive bytes allocated by each function (excluding nested calls).".to_string()
+        }
+        #[cfg(not(feature = "hotpath-alloc-self"))]
+        {
+            "Cumulative bytes allocated during each function call (including nested calls)."
+                .to_string()
+        }
     }
 
     fn percentiles(&self) -> Vec<u8> {
@@ -60,18 +68,30 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
             filtered_stats
         };
 
-        let wrapper_total_bytes = self
-            .stats
-            .iter()
-            .find(|(_, s)| s.wrapper)
-            .map(|(_, s)| s.total_bytes());
-
-        let grand_total_bytes: u64 = wrapper_total_bytes.unwrap_or_else(|| {
-            filtered_stats
+        #[cfg(feature = "hotpath-alloc-self")]
+        let grand_total_bytes: u64 = {
+            self.stats
                 .iter()
+                .filter(|(_, s)| s.has_data)
                 .map(|(_, stats)| stats.total_bytes())
                 .sum()
-        });
+        };
+
+        #[cfg(not(feature = "hotpath-alloc-self"))]
+        let grand_total_bytes: u64 = {
+            let wrapper_total_bytes = self
+                .stats
+                .iter()
+                .find(|(_, s)| s.wrapper)
+                .map(|(_, s)| s.total_bytes());
+
+            wrapper_total_bytes.unwrap_or_else(|| {
+                filtered_stats
+                    .iter()
+                    .map(|(_, stats)| stats.total_bytes())
+                    .sum()
+            })
+        };
 
         filtered_stats
             .into_iter()

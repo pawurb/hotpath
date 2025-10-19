@@ -42,8 +42,11 @@ impl Drop for MeasurementGuard {
                 let depth = s.depth as usize;
                 let popped = s.elements[depth];
                 s.depth -= 1;
-                let parent = s.depth as usize;
-                s.elements[parent] += popped;
+                #[cfg(not(feature = "hotpath-alloc-self"))]
+                {
+                    let parent = s.depth as usize;
+                    s.elements[parent] += popped;
+                }
                 popped
             })
         };

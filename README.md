@@ -35,7 +35,8 @@ hotpath = { version = "0.4", optional = true }
 [features]
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
 hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
-hotpath-alloc-count-total= ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
+hotpath-alloc-self = ["hotpath/hotpath-alloc-self"]
 hotpath-off = ["hotpath/hotpath-off"]
 ```
 
@@ -106,6 +107,8 @@ Available alloc profiling modes:
 
 - `hotpath-alloc-bytes-total` - Tracks total bytes allocated during each function call
 - `hotpath-alloc-count-total` - Tracks total number of allocations per function call
+
+By default, allocation tracking is **cumulative**, meaning that a function's allocation count includes all allocations made by functions it calls (nested calls). Notably, it produces invalid results for recursive functions. To track only **exclusive** allocations (direct allocations made by each function, excluding nested calls), enable the `hotpath-alloc-self` feature flag in combination with an allocation profiling mode.
 
 Run your program with a selected flag to print a similar report:
 
