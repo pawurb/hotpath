@@ -24,6 +24,11 @@ async fn async_function(sleep: u64) {
     tokio::time::sleep(Duration::from_nanos(sleep)).await;
 }
 
+#[cfg_attr(feature = "hotpath", hotpath::measure_all)]
+mod measured_module {
+    pub fn sync_function() {}
+}
+
 #[tokio::main(flavor = "current_thread")]
 #[cfg_attr(feature = "hotpath", hotpath::main)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

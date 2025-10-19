@@ -1,5 +1,5 @@
 pub use cfg_if::cfg_if;
-pub use hotpath_macros::{main, measure, skip};
+pub use hotpath_macros::{main, measure, measure_all, skip};
 
 #[macro_export]
 macro_rules! measure_block {
@@ -51,7 +51,7 @@ impl GuardBuilder {
         self
     }
 
-    pub fn limit(mut self, limit: usize) -> Self {
+    pub fn limit(self, _limit: usize) -> Self {
         self
     }
 
