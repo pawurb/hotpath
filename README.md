@@ -18,7 +18,7 @@ In [this post](https://pawelurbanek.com/rust-optimize-performance), I explain th
 
 ![hotpath GitHub Actions](mevlog-enable-cache.png)
 
-See [hotpath CI](https://github.com/pawurb/hotpath/blob/main/.github/workflows/hotpath.yml) for a sample config.
+See [hotpath-profile](https://github.com/pawurb/hotpath/blob/main/.github/workflows/hotpath-profile.yml) and [hotpath-comment](https://github.com/pawurb/hotpath/blob/main/.github/workflows/hotpath-comment.yml) for a sample config.
 
 ## Quick Start
 
