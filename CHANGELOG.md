@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2025-10-19
+
+### 🐛 Bug Fixes
+
+- Support measure_all with all-features config
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.5.1
+
 ## [0.5.0] - 2025-10-18
 
 ### 🚀 Features
