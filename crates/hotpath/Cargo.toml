@@ -28,8 +28,7 @@ colored = { version = "3" }
 crossbeam-channel = "0.5"
 eyre = "0.6"
 hdrhistogram = { version = "7.5", default-features = false }
-hotpath-macros = { version = "0.5.1" }
-# hotpath-macros = { path = "../hotpath-macros" }
+hotpath-macros = { workspace = true }
 prettytable-rs = { version = "0.10", default-features = false }
 quanta = "0.12"
 serde = { version = "1.0", features = ["derive"] }
