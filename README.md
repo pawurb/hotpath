@@ -1,4 +1,4 @@
-# hotpath - find and profile bottlenecks in Rust
+# hotpath - find and profile bottlenecks in Rust [change]
 [![Latest Version](https://img.shields.io/crates/v/hotpath.svg)](https://crates.io/crates/hotpath) [![GH Actions](https://github.com/pawurb/hotpath/actions/workflows/ci.yml/badge.svg)](https://github.com/pawurb/hotpath/actions)
 
 [![Profiling report for mevlog-rs](hotpath-timing-report.png)](https://github.com/pawurb/mevlog-rs)
