@@ -1,8 +1,7 @@
-name: profile-on-pr
+name: hotpath-profile
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  pull_request:
 
 permissions:
   contents: read
@@ -10,13 +9,9 @@ permissions:
 jobs:
   profile:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - uses: dtolnay/rust-toolchain@stable
@@ -76,52 +71,3 @@ jobs:
           name: profile-metrics
           path: /tmp/metrics/
           retention-days: 1
-
-  comment:
-    runs-on: ubuntu-latest
-    needs: profile
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install hotpath CLI
-        run: cargo install --path crates/hotpath
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: profile-metrics
-          path: /tmp/metrics/
-
-      - name: Post PR comment - timing mode
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          HEAD_METRICS=$(cat /tmp/metrics/head_timing.json)
-          BASE_METRICS=$(cat /tmp/metrics/base_timing.json)
-          PR_NUMBER=$(cat /tmp/metrics/pr_number.txt)
-          hotpath profile-pr \
-            --head-metrics "$HEAD_METRICS" \
-            --base-metrics "$BASE_METRICS" \
-            --github-token "$GH_TOKEN" \
-            --pr-number "$PR_NUMBER"
-
-      - name: Post PR comment - alloc mode
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          HEAD_METRICS=$(cat /tmp/metrics/head_alloc.json)
-          BASE_METRICS=$(cat /tmp/metrics/base_alloc.json)
-          PR_NUMBER=$(cat /tmp/metrics/pr_number.txt)
-          hotpath profile-pr \
-            --head-metrics "$HEAD_METRICS" \
-            --base-metrics "$BASE_METRICS" \
-            --github-token "$GH_TOKEN" \
-            --pr-number "$PR_NUMBER"
