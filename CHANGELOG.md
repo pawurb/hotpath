@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2025-10-20
+
+### 🚀 Features
+
+- Add hotpath-alloc-self feature flag
+
+### ⚙️ Miscellaneous Tasks
+
+- Configure hotpath-macros dependency
+- Adjust hotpath CI
+- More secure hotpath CI setup
+- Release v0.5.2
+
 ## [0.5.1] - 2025-10-19
 
 ### 🐛 Bug Fixes
