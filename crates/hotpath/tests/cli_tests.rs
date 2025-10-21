@@ -690,4 +690,36 @@ pub mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_multithread_alloc_no_panic() {
+        let feature_sets = [
+            "hotpath,hotpath-alloc-count-total",
+            "hotpath,hotpath-alloc-bytes-total",
+            "hotpath,hotpath-alloc-count-total,hotpath-alloc-self",
+            "hotpath,hotpath-alloc-bytes-total,hotpath-alloc-self",
+        ];
+
+        for features in feature_sets {
+            let output = Command::new("cargo")
+                .args([
+                    "run",
+                    "-p",
+                    "hotpath-test-tokio-async",
+                    "--example",
+                    "multithread_alloc",
+                    "--features",
+                    features,
+                ])
+                .output()
+                .expect("Failed to execute command");
+
+            assert!(
+                output.status.success(),
+                "Process did not exit successfully with features: {}\n\nstderr:\n{}",
+                features,
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
 }
