@@ -14,7 +14,7 @@ async fn noop_async_function() {
 #[tokio::main(flavor = "current_thread")]
 #[cfg_attr(feature = "hotpath", hotpath::main)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    for _ in 0..10_000 {
+    for _ in 0..100_000 {
         noop_sync_function();
         noop_async_function().await;
     }

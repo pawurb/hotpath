@@ -112,7 +112,7 @@ pub enum Format {
     JsonPretty,
 }
 
-use crossbeam_channel::{bounded, select};
+use crossbeam_channel::{bounded, select, unbounded};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Instant;
@@ -468,7 +468,7 @@ impl HotPath {
             panic!("More than one _hotpath guard cannot be alive at the same time.");
         }
 
-        let (tx, rx) = bounded::<Measurement>(10000);
+        let (tx, rx) = unbounded::<Measurement>();
         let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
         let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
         let start_time = Instant::now();
