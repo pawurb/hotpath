@@ -1,11 +1,10 @@
-use super::core::AllocationInfo;
 use crossbeam_channel::{Receiver, Sender};
 use hdrhistogram::Histogram;
 use std::collections::HashMap;
 use std::time::Instant;
 
 pub enum Measurement {
-    Allocation(&'static str, AllocationInfo, bool), // function_name, allocation_info, wrapper
+    Allocation(&'static str, u64, bool, bool), // function_name, count_total, unsupported_async, wrapper
 }
 
 #[derive(Debug, Clone)]
@@ -22,7 +21,7 @@ impl FunctionStats {
     const HIGH_COUNT: u64 = 1_000_000_000; // 1 billion allocations
     const SIGFIGS: u8 = 3;
 
-    pub fn new_alloc(alloc_info: &AllocationInfo, wrapper: bool) -> Self {
+    pub fn new_alloc(count_total: u64, unsupported_async: bool, wrapper: bool) -> Self {
         let count_total_hist =
             Histogram::<u64>::new_with_bounds(Self::LOW_COUNT, Self::HIGH_COUNT, Self::SIGFIGS)
                 .expect("count_total histogram init");
@@ -31,29 +30,27 @@ impl FunctionStats {
             count: 1,
             count_total_hist: Some(count_total_hist),
             has_data: true,
-            has_unsupported_async: alloc_info.unsupported_async,
+            has_unsupported_async: unsupported_async,
             wrapper,
         };
-        s.record_alloc(alloc_info);
+        s.record_alloc(count_total);
         s
     }
 
     #[inline]
-    fn record_alloc(&mut self, alloc_info: &AllocationInfo) {
+    fn record_alloc(&mut self, count_total: u64) {
         if let Some(ref mut count_total_hist) = self.count_total_hist {
-            if alloc_info.count_total > 0 {
-                let clamped_total = alloc_info
-                    .count_total
-                    .clamp(Self::LOW_COUNT, Self::HIGH_COUNT);
+            if count_total > 0 {
+                let clamped_total = count_total.clamp(Self::LOW_COUNT, Self::HIGH_COUNT);
                 count_total_hist.record(clamped_total).unwrap();
             }
         }
     }
 
-    pub fn update_alloc(&mut self, alloc_info: &AllocationInfo) {
+    pub fn update_alloc(&mut self, count_total: u64, unsupported_async: bool) {
         self.count += 1;
-        self.has_unsupported_async |= alloc_info.unsupported_async;
-        self.record_alloc(alloc_info);
+        self.has_unsupported_async |= unsupported_async;
+        self.record_alloc(count_total);
     }
 
     #[inline]
@@ -103,11 +100,14 @@ pub(crate) fn process_measurement(
     m: Measurement,
 ) {
     match m {
-        Measurement::Allocation(name, alloc_info, wrapper) => {
+        Measurement::Allocation(name, count_total, unsupported_async, wrapper) => {
             if let Some(s) = stats.get_mut(name) {
-                s.update_alloc(&alloc_info);
+                s.update_alloc(count_total, unsupported_async);
             } else {
-                stats.insert(name, FunctionStats::new_alloc(&alloc_info, wrapper));
+                stats.insert(
+                    name,
+                    FunctionStats::new_alloc(count_total, unsupported_async, wrapper),
+                );
             }
         }
     }
@@ -115,7 +115,12 @@ pub(crate) fn process_measurement(
 
 use crate::lib_on::HOTPATH_STATE;
 
-pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo, wrapper: bool) {
+pub fn send_alloc_measurement(
+    name: &'static str,
+    count_total: u64,
+    unsupported_async: bool,
+    wrapper: bool,
+) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {
         panic!(
             "GuardBuilder::new(\"main\").build() must be called when --features hotpath-alloc-count-total is enabled"
@@ -133,6 +138,6 @@ pub fn send_alloc_measurement(name: &'static str, alloc_info: AllocationInfo, wr
         return;
     };
 
-    let measurement = Measurement::Allocation(name, alloc_info, wrapper);
+    let measurement = Measurement::Allocation(name, count_total, unsupported_async, wrapper);
     let _ = sender.try_send(measurement);
 }

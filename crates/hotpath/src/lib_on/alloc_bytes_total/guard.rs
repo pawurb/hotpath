@@ -1,5 +1,3 @@
-use super::core::AllocationInfo;
-
 pub struct MeasurementGuard {
     name: &'static str,
     wrapper: bool,
@@ -11,11 +9,12 @@ impl MeasurementGuard {
     pub fn new(name: &'static str, wrapper: bool, unsupported_async: bool) -> Self {
         if !unsupported_async {
             super::core::ALLOCATIONS.with(|stack| {
-                let mut s = stack.borrow_mut();
-                s.depth += 1;
-                assert!((s.depth as usize) < super::core::MAX_DEPTH);
-                let depth = s.depth as usize;
-                s.elements[depth] = AllocationInfo::default();
+                let current_depth = stack.depth.get();
+                stack.depth.set(current_depth + 1);
+                assert!((stack.depth.get() as usize) < super::core::MAX_DEPTH);
+                let depth = stack.depth.get() as usize;
+                stack.elements[depth].bytes_total.set(0);
+                stack.elements[depth].unsupported_async.set(false);
             });
         }
 
@@ -30,26 +29,36 @@ impl MeasurementGuard {
 impl Drop for MeasurementGuard {
     #[inline]
     fn drop(&mut self) {
-        let alloc_info = if self.unsupported_async {
-            crate::lib_on::alloc_bytes_total::core::AllocationInfo {
-                bytes_total: 0,
-                unsupported_async: true,
-            }
+        let (bytes_total, unsupported_async) = if self.unsupported_async {
+            (0, true)
         } else {
             super::core::ALLOCATIONS.with(|stack| {
-                let mut s = stack.borrow_mut();
-                let depth = s.depth as usize;
-                let popped = s.elements[depth];
-                s.depth -= 1;
+                let depth = stack.depth.get() as usize;
+                let bytes = stack.elements[depth].bytes_total.get();
+                let unsup_async = stack.elements[depth].unsupported_async.get();
+
+                stack.depth.set(stack.depth.get() - 1);
+
                 #[cfg(not(feature = "hotpath-alloc-self"))]
                 {
-                    let parent = s.depth as usize;
-                    s.elements[parent] += popped;
+                    let parent = stack.depth.get() as usize;
+                    stack.elements[parent]
+                        .bytes_total
+                        .set(stack.elements[parent].bytes_total.get() + bytes);
+                    stack.elements[parent]
+                        .unsupported_async
+                        .set(stack.elements[parent].unsupported_async.get() | unsup_async);
                 }
-                popped
+
+                (bytes, unsup_async)
             })
         };
 
-        super::state::send_alloc_measurement(self.name, alloc_info, self.wrapper);
+        super::state::send_alloc_measurement(
+            self.name,
+            bytes_total,
+            unsupported_async,
+            self.wrapper,
+        );
     }
 }
