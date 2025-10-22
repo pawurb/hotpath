@@ -30,7 +30,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-hotpath = { version = "0.4", optional = true }
+hotpath = { version = "0.5", optional = true }
 
 [features]
 hotpath = ["dep:hotpath", "hotpath/hotpath"]
