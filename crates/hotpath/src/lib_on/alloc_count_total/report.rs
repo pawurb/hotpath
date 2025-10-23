@@ -55,7 +55,11 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn metric_data(&self) -> HashMap<String, Vec<MetricType>> {
-        let mut filtered_stats: Vec<_> = self.stats.iter().filter(|(_, s)| s.has_data).collect();
+        let mut filtered_stats: Vec<_> = self
+            .stats
+            .iter()
+            .filter(|(_, s)| s.has_data && !(s.wrapper && s.cross_thread))
+            .collect();
 
         filtered_stats.sort_by(|a, b| b.1.total_count().cmp(&a.1.total_count()));
 
@@ -79,18 +83,31 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
 
         #[cfg(not(feature = "hotpath-alloc-self"))]
         let grand_total_count: u64 = {
-            let wrapper_total_count = self
-                .stats
-                .iter()
-                .find(|(_, s)| s.wrapper)
-                .map(|(_, s)| s.total_count());
+            let has_cross_thread_wrapper =
+                self.stats.iter().any(|(_, s)| s.wrapper && s.cross_thread);
 
-            wrapper_total_count.unwrap_or_else(|| {
+            if has_cross_thread_wrapper {
+                // If wrapper was moved across threads, use sum of all functions
                 filtered_stats
                     .iter()
+                    .filter(|(_, s)| !s.wrapper)
                     .map(|(_, stats)| stats.total_count())
                     .sum()
-            })
+            } else {
+                // Use wrapper total if available
+                let wrapper_total_count = self
+                    .stats
+                    .iter()
+                    .find(|(_, s)| s.wrapper)
+                    .map(|(_, s)| s.total_count());
+
+                wrapper_total_count.unwrap_or_else(|| {
+                    filtered_stats
+                        .iter()
+                        .map(|(_, stats)| stats.total_count())
+                        .sum()
+                })
+            }
         };
 
         filtered_stats
@@ -104,7 +121,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
                     0.0
                 };
 
-                let mut metrics = if stats.has_unsupported_async {
+                let mut metrics = if stats.has_unsupported_async || stats.cross_thread {
                     vec![MetricType::CallsCount(stats.count), MetricType::Unsupported]
                 } else {
                     vec![
@@ -114,7 +131,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
                 };
 
                 for &p in &self.percentiles {
-                    if stats.has_unsupported_async {
+                    if stats.has_unsupported_async || stats.cross_thread {
                         metrics.push(MetricType::Unsupported);
                     } else {
                         let count_total = stats.count_total_percentile(p as f64);
@@ -122,7 +139,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
                     }
                 }
 
-                if stats.has_unsupported_async {
+                if stats.has_unsupported_async || stats.cross_thread {
                     metrics.push(MetricType::Unsupported);
                     metrics.push(MetricType::Unsupported);
                 } else {
@@ -144,7 +161,11 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn entry_counts(&self) -> (usize, usize) {
-        let total_count = self.stats.iter().filter(|(_, s)| s.has_data).count();
+        let total_count = self
+            .stats
+            .iter()
+            .filter(|(_, s)| s.has_data && !(s.wrapper && s.cross_thread))
+            .count();
 
         let displayed_count = if self.limit > 0 && self.limit < total_count {
             self.limit
