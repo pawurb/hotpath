@@ -1,6 +1,7 @@
 use crossbeam_channel::{Receiver, Sender};
 use hdrhistogram::Histogram;
 use std::collections::HashMap;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub enum Measurement {
@@ -72,7 +73,7 @@ impl FunctionStats {
 pub(crate) struct HotPathState {
     pub sender: Option<Sender<Measurement>>,
     pub shutdown_tx: Option<Sender<()>>,
-    pub completion_rx: Option<Receiver<HashMap<&'static str, FunctionStats>>>,
+    pub completion_rx: Option<Mutex<Receiver<HashMap<&'static str, FunctionStats>>>>,
     pub start_time: Instant,
     pub caller_name: &'static str,
     pub percentiles: Vec<u8>,
