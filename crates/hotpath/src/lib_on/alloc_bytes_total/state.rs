@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::time::Instant;
 
 pub enum Measurement {
-    Allocation(&'static str, u64, bool, bool), // function_name, bytes_total, unsupported_async, wrapper
+    Allocation(&'static str, u64, bool, bool, bool), // function_name, bytes_total, unsupported_async, wrapper, cross_thread
 }
 
 #[derive(Debug, Clone)]
@@ -15,6 +15,7 @@ pub struct FunctionStats {
     pub has_data: bool,
     pub has_unsupported_async: bool,
     pub wrapper: bool,
+    pub cross_thread: bool,
 }
 
 impl FunctionStats {
@@ -22,7 +23,12 @@ impl FunctionStats {
     const HIGH_BYTES: u64 = 1_000_000_000; // 1GB
     const SIGFIGS: u8 = 3;
 
-    pub fn new_alloc(bytes_total: u64, unsupported_async: bool, wrapper: bool) -> Self {
+    pub fn new_alloc(
+        bytes_total: u64,
+        unsupported_async: bool,
+        wrapper: bool,
+        cross_thread: bool,
+    ) -> Self {
         let bytes_total_hist =
             Histogram::<u64>::new_with_bounds(Self::LOW_BYTES, Self::HIGH_BYTES, Self::SIGFIGS)
                 .expect("bytes_total histogram init");
@@ -33,6 +39,7 @@ impl FunctionStats {
             has_data: true,
             has_unsupported_async: unsupported_async,
             wrapper,
+            cross_thread,
         };
         s.record_alloc(bytes_total);
         s
@@ -48,9 +55,10 @@ impl FunctionStats {
         }
     }
 
-    pub fn update_alloc(&mut self, bytes_total: u64, unsupported_async: bool) {
+    pub fn update_alloc(&mut self, bytes_total: u64, unsupported_async: bool, cross_thread: bool) {
         self.count += 1;
         self.has_unsupported_async |= unsupported_async;
+        self.cross_thread |= cross_thread;
         self.record_alloc(bytes_total);
     }
 
@@ -101,13 +109,13 @@ pub(crate) fn process_measurement(
     m: Measurement,
 ) {
     match m {
-        Measurement::Allocation(name, bytes_total, unsupported_async, wrapper) => {
+        Measurement::Allocation(name, bytes_total, unsupported_async, wrapper, cross_thread) => {
             if let Some(s) = stats.get_mut(name) {
-                s.update_alloc(bytes_total, unsupported_async);
+                s.update_alloc(bytes_total, unsupported_async, cross_thread);
             } else {
                 stats.insert(
                     name,
-                    FunctionStats::new_alloc(bytes_total, unsupported_async, wrapper),
+                    FunctionStats::new_alloc(bytes_total, unsupported_async, wrapper, cross_thread),
                 );
             }
         }
@@ -121,6 +129,7 @@ pub fn send_alloc_measurement(
     bytes_total: u64,
     unsupported_async: bool,
     wrapper: bool,
+    cross_thread: bool,
 ) {
     let Some(arc_swap) = HOTPATH_STATE.get() else {
         panic!(
@@ -139,6 +148,7 @@ pub fn send_alloc_measurement(
         return;
     };
 
-    let measurement = Measurement::Allocation(name, bytes_total, unsupported_async, wrapper);
+    let measurement =
+        Measurement::Allocation(name, bytes_total, unsupported_async, wrapper, cross_thread);
     let _ = sender.try_send(measurement);
 }
