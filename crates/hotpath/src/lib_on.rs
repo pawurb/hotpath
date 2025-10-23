@@ -596,10 +596,10 @@ impl Drop for HotPath {
 mod tests {
     use super::*;
 
-    fn is_normal<T: Send + Sync>() {}
+    fn is_send_sync<T: Send + Sync>() {}
 
     #[test]
     fn test_hotpath_is_send_sync() {
-        is_normal::<HotPath>();
+        is_send_sync::<HotPath>();
     }
 }
