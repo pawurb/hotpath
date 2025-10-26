@@ -231,6 +231,7 @@ Macro that measures the execution time of a code block with a static string labe
 - `.limit(usize)` - Set maximum number of functions to display (default: 15, 0 = show all)
 - `.reporter(Box<dyn Reporter>)` - Set custom reporter (overrides format)
 - `.build()` - Build and return the HotPath guard
+- `.build_with_timeout(Duration)` - Build guard that automatically drops after duration and exits the program (useful for profiling programs that don't exit by themselves, e.g. HTTP servers)
 
 **Example:**
 ```rust
@@ -239,6 +240,28 @@ let _guard = hotpath::GuardBuilder::new("main")
     .limit(20)
     .format(hotpath::Format::JsonPretty)
     .build();
+```
+
+**Timed profiling example:**
+
+```rust
+use std::time::Duration;
+
+#[cfg_attr(feature = "hotpath", hotpath::measure)]
+fn work_function() {
+    std::thread::sleep(Duration::from_millis(10));
+}
+
+fn main() {
+    // Profile for 1 second, then generate report and exit
+    #[cfg(feature = "hotpath")]
+    hotpath::GuardBuilder::new("timed_benchmark")
+        .build_with_timeout(Duration::from_secs(1));
+
+    loop {
+        work_function();
+    }
+}
 ```
 
 ## Usage Patterns

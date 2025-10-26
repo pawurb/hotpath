@@ -144,7 +144,7 @@ pub(crate) fn format_function_name(function_name: &str) -> String {
 ///
 /// * [`MetricsProvider`] - Trait for accessing profiling metrics data
 /// * [`GuardBuilder::reporter`](crate::GuardBuilder::reporter) - Method to set custom reporter
-pub trait Reporter {
+pub trait Reporter: Send + Sync {
     fn report(
         &self,
         metrics_provider: &dyn MetricsProvider<'_>,

@@ -75,3 +75,7 @@ path = "examples/tracing_reporter.rs"
 [[example]]
 name = "json_file_reporter"
 path = "examples/json_file_reporter.rs"
+
+[[example]]
+name = "guard_timer"
+path = "examples/guard_timer.rs"

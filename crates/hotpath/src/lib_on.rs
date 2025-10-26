@@ -173,6 +173,7 @@ macro_rules! measure_block {
 
 use arc_swap::ArcSwapOption;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 
@@ -451,6 +452,40 @@ impl GuardBuilder {
 
         HotPath::new(self.caller_name, &self.percentiles, self.limit, reporter)
     }
+
+    /// Builds the hotpath profiling guard and automatically drops it after the specified duration and exits the program.
+    ///
+    /// If used in memory profiling mode, it disables the top level measurement. To support timeout guard is moved between threads making accurate memory measurements impossible.
+    /// # Arguments
+    ///
+    /// * `duration` - The duration to wait before dropping the guard and generating the report
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[cfg(feature = "hotpath")]
+    /// # {
+    /// use std::time::Duration;
+    /// use hotpath::GuardBuilder;
+    ///
+    /// // Profile for 1 second then exit
+    /// GuardBuilder::new("timed_benchmark")
+    ///     .build_with_timeout(Duration::from_secs(1));
+    ///
+    /// // Your code here - will be profiled for 1 second
+    /// loop {
+    ///     // Work...
+    /// }
+    /// # }
+    /// ```
+    pub fn build_with_timeout(self, duration: std::time::Duration) {
+        let guard = self.build();
+        thread::spawn(move || {
+            thread::sleep(duration);
+            drop(guard);
+            std::process::exit(0);
+        });
+    }
 }
 
 impl HotPath {
@@ -476,7 +511,7 @@ impl HotPath {
         let state_arc = Arc::new(RwLock::new(HotPathState {
             sender: Some(tx),
             shutdown_tx: Some(shutdown_tx),
-            completion_rx: Some(completion_rx),
+            completion_rx: Some(Mutex::new(completion_rx)),
             start_time,
             caller_name,
             percentiles,
@@ -563,21 +598,23 @@ impl Drop for HotPath {
             let _ = tx.send(());
         }
 
-        if let Some(rx) = completion_rx {
-            if let Ok(stats) = rx.recv() {
-                if let Ok(state_guard) = state.read() {
-                    let total_elapsed = end_time.duration_since(state_guard.start_time);
-                    let metrics_provider = StatsData::new(
-                        &stats,
-                        total_elapsed,
-                        state_guard.percentiles.clone(),
-                        state_guard.caller_name,
-                        state_guard.limit,
-                    );
+        if let Some(rx_mutex) = completion_rx {
+            if let Ok(rx) = rx_mutex.lock() {
+                if let Ok(stats) = rx.recv() {
+                    if let Ok(state_guard) = state.read() {
+                        let total_elapsed = end_time.duration_since(state_guard.start_time);
+                        let metrics_provider = StatsData::new(
+                            &stats,
+                            total_elapsed,
+                            state_guard.percentiles.clone(),
+                            state_guard.caller_name,
+                            state_guard.limit,
+                        );
 
-                    match self.reporter.report(&metrics_provider) {
-                        Ok(()) => (),
-                        Err(e) => eprintln!("Failed to report hotpath metrics: {}", e),
+                        match self.reporter.report(&metrics_provider) {
+                            Ok(()) => (),
+                            Err(e) => eprintln!("Failed to report hotpath metrics: {}", e),
+                        }
                     }
                 }
             }
@@ -586,5 +623,17 @@ impl Drop for HotPath {
         if let Some(arc_swap) = HOTPATH_STATE.get() {
             arc_swap.store(None);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn test_hotpath_is_send_sync() {
+        is_send_sync::<HotPath>();
     }
 }
