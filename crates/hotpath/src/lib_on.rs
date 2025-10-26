@@ -452,6 +452,40 @@ impl GuardBuilder {
 
         HotPath::new(self.caller_name, &self.percentiles, self.limit, reporter)
     }
+
+    /// Builds the hotpath profiling guard and automatically drops it after the specified duration and exits the program.
+    ///
+    /// If used in memory profiling mode, it disables the top level measurement. To support timeout guard is moved between threads making accurate memory measurements impossible.
+    /// # Arguments
+    ///
+    /// * `duration` - The duration to wait before dropping the guard and generating the report
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// # #[cfg(feature = "hotpath")]
+    /// # {
+    /// use std::time::Duration;
+    /// use hotpath::GuardBuilder;
+    ///
+    /// // Profile for 1 second then exit
+    /// GuardBuilder::new("timed_benchmark")
+    ///     .build_with_timeout(Duration::from_secs(1));
+    ///
+    /// // Your code here - will be profiled for 1 second
+    /// loop {
+    ///     // Work...
+    /// }
+    /// # }
+    /// ```
+    pub fn build_with_timeout(self, duration: std::time::Duration) {
+        let guard = self.build();
+        thread::spawn(move || {
+            thread::sleep(duration);
+            drop(guard);
+            std::process::exit(0);
+        });
+    }
 }
 
 impl HotPath {

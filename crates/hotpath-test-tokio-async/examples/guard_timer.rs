@@ -19,14 +19,7 @@ fn second_function(sleep: u64) {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "hotpath")]
-    let guard = hotpath::GuardBuilder::new("guard_timeout::main").build();
-
-    #[cfg(feature = "hotpath")]
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(1));
-        drop(guard);
-        std::process::exit(0);
-    });
+    hotpath::GuardBuilder::new("guard_timeout::main").build_with_timeout(Duration::from_secs(1));
 
     loop {
         first_function(100);

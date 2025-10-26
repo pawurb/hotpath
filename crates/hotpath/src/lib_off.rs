@@ -26,6 +26,8 @@ impl MeasurementGuard {
     pub fn build(_name: &'static str, _wrapper: bool, _is_async: bool) -> Self {
         Self {}
     }
+
+    pub fn build_with_timeout(self, _duration: std::time::Duration) {}
 }
 
 pub struct HotPath;
