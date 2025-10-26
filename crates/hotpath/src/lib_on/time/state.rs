@@ -18,7 +18,7 @@ pub struct FunctionStats {
 
 impl FunctionStats {
     const LOW_NS: u64 = 1;
-    const HIGH_NS: u64 = 10_000_000_000; // 10s
+    const HIGH_NS: u64 = 1_000_000_000_000; // 1000s
     const SIGFIGS: u8 = 3;
 
     pub fn new_duration(first_ns: u64, wrapper: bool) -> Self {
