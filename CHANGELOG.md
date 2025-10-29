@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2025-10-29
+
+### 🚀 Features
+
+- Hotpath guard Send + Sync, add build_with_timeout
+- Add timeout macro param
+
+### 🐛 Bug Fixes
+
+- Use unbounded channel, upscale benchmark
+- Increase time clamp range
+
+### 🚜 Refactor
+
+- Use named module file
+- Remove unused guard, add alloc panic test
+
+### ⚡ Performance
+
+- Use Cell for alloc metrics
+
+### ⚙️ Miscellaneous Tasks
+
+- Release v0.5.3
+
 ## [0.5.2] - 2025-10-20
 
 ### 🚀 Features
