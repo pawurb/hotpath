@@ -77,5 +77,9 @@ name = "json_file_reporter"
 path = "examples/json_file_reporter.rs"
 
 [[example]]
-name = "guard_timer"
-path = "examples/guard_timer.rs"
+name = "main_timeout"
+path = "examples/main_timeout.rs"
+
+[[example]]
+name = "guard_timeout"
+path = "examples/guard_timeout.rs"

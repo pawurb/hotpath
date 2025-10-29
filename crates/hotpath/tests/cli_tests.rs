@@ -722,4 +722,77 @@ pub mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_main_timeout_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "main_timeout",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let expected_content = [
+            "main_timeout::first_function",
+            "main_timeout::second_function",
+            "loop_block",
+            "main_timeout::main",
+        ];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
+
+    #[test]
+    fn test_guard_timeout_output() {
+        let output = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "guard_timeout",
+                "--features",
+                "hotpath",
+            ])
+            .output()
+            .expect("Failed to execute command");
+
+        assert!(
+            output.status.success(),
+            "Process did not exit successfully.\n\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let expected_content = [
+            "guard_timeout::first_function",
+            "guard_timeout::second_function",
+            "loop_block",
+        ];
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for expected in expected_content {
+            assert!(
+                stdout.contains(expected),
+                "Expected:\n{expected}\n\nGot:\n{stdout}",
+            );
+        }
+    }
 }

@@ -32,6 +32,7 @@ impl Format {
 /// * `percentiles` - Array of percentile values (0-100) to display in the report. Default: `[95]`
 /// * `format` - Output format as a string: `"table"` (default), `"json"`, or `"json-pretty"`
 /// * `limit` - Maximum number of functions to display in the report (0 = show all). Default: `15`
+/// * `timeout` - Optional timeout in milliseconds. If specified, the program will print the report and exit after the timeout.
 ///
 /// # Examples
 ///
@@ -114,6 +115,7 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut percentiles: Vec<u8> = vec![95];
     let mut format = Format::Table;
     let mut limit: usize = 15;
+    let mut timeout: Option<u64> = None;
 
     // Parse named args like: percentiles=[..], format=".."
     if !attr.is_empty() {
@@ -166,8 +168,16 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
                 return Ok(());
             }
 
-            Err(meta
-                .error("Unknown parameter. Supported: percentiles=[..], format=\"..\", limit=N"))
+            if meta.path.is_ident("timeout") {
+                meta.input.parse::<syn::Token![=]>()?;
+                let li: LitInt = meta.input.parse()?;
+                timeout = Some(li.base10_parse()?);
+                return Ok(());
+            }
+
+            Err(meta.error(
+                "Unknown parameter. Supported: percentiles=[..], format=\"..\", limit=N, timeout=N",
+            ))
         });
 
         if let Err(e) = parser.parse2(proc_macro2::TokenStream::from(attr)) {
@@ -181,17 +191,29 @@ pub fn main(attr: TokenStream, item: TokenStream) -> TokenStream {
     let asyncness = sig.asyncness.is_some();
     let fn_name = &sig.ident;
 
-    let guard_init = quote! {
-        let _hotpath = {
-            let caller_name: &'static str =
-                concat!(module_path!(), "::", stringify!(#fn_name));
+    let base_builder = quote! {
+        let caller_name: &'static str =
+            concat!(module_path!(), "::", stringify!(#fn_name));
 
-            hotpath::GuardBuilder::new(caller_name)
-                .percentiles(#percentiles_array)
-                .limit(#limit)
-                .format(#format_token)
-                .build()
-        };
+        hotpath::GuardBuilder::new(caller_name)
+            .percentiles(#percentiles_array)
+            .limit(#limit)
+            .format(#format_token)
+    };
+
+    let guard_init = if let Some(timeout_ms) = timeout {
+        quote! {
+            let _hotpath = {
+                #base_builder
+                    .build_with_timeout(std::time::Duration::from_millis(#timeout_ms))
+            };
+        }
+    } else {
+        quote! {
+            let _hotpath = {
+                #base_builder.build()
+            };
+        }
     };
 
     let body = quote! {

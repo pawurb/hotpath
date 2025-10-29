@@ -169,6 +169,7 @@ Attribute macro that initializes the background measurement processing when appl
 - `percentiles = [50, 95, 99]` - Custom percentiles to display
 - `format = "json"` - Output format ("table", "json", "json-pretty")
 - `limit = 20` - Maximum number of functions to display (default: 15, 0 = show all)
+- `timeout = 5000` - Optional timeout in milliseconds. If specified, the program will print the report and exit after the timeout (useful for profiling long-running programs like HTTP servers)
 
 #### `#[hotpath::measure]`
 
@@ -231,7 +232,7 @@ Macro that measures the execution time of a code block with a static string labe
 - `.limit(usize)` - Set maximum number of functions to display (default: 15, 0 = show all)
 - `.reporter(Box<dyn Reporter>)` - Set custom reporter (overrides format)
 - `.build()` - Build and return the HotPath guard
-- `.build_with_timeout(Duration)` - Build guard that automatically drops after duration and exits the program (useful for profiling programs that don't exit by themselves, e.g. HTTP servers)
+- `.build_with_timeout(Duration)` - Build guard that automatically drops after duration and exits the program (useful for profiling long-running programs like HTTP servers)
 
 **Example:**
 ```rust
@@ -242,7 +243,7 @@ let _guard = hotpath::GuardBuilder::new("main")
     .build();
 ```
 
-**Timed profiling example:**
+**Timed profiling example**
 
 ```rust
 use std::time::Duration;
@@ -403,7 +404,7 @@ Example JSON output:
 You can combine multiple parameters:
 
 ```rust
-#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json", limit = 10))]
+#[cfg_attr(feature = "hotpath", hotpath::main(percentiles = [50, 90, 99], format = "json", limit = 10, timeout = 30000))]
 ```
 
 ## Custom Reporters
