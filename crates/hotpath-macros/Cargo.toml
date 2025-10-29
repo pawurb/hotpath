@@ -1,6 +1,6 @@
 [package]
 name = "hotpath-macros"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2021"
 repository = "https://github.com/pawurb/hotpath"
 description = "A simple Rust profiler that shows exactly where your code spends time and allocates memory"
