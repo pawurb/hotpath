@@ -7,6 +7,8 @@ A lightweight, easy-to-configure Rust profiler that shows exactly where your cod
 
 In [this post](https://pawelurbanek.com/rust-optimize-performance), I explain the motivation behind the project and its inner workings.
 
+BTW if you're into Rust perf also check out a new [tokio-channels-console](https://github.com/pawurb/tokio-channels-console) crate.
+
 ## Features
 
 - **Zero-cost when disabled** — fully gated by a feature flag.
