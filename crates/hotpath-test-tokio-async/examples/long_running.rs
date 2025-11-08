@@ -67,8 +67,6 @@ fn process_data(data: Vec<u64>) -> u64 {
 #[cfg_attr(feature = "hotpath", hotpath::main)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting 60-second profiling test...");
-    println!("This will call 5 different sync/async methods with random allocations");
-    println!("Press Ctrl+C to stop early\n");
 
     let start = Instant::now();
     let duration = Duration::from_secs(60);
@@ -116,9 +114,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::hint::black_box(&temp);
         });
     }
-
-    println!("\n60 seconds completed! Total iterations: {}", iteration);
-    println!("Profiling report will be generated on exit...\n");
 
     Ok(())
 }

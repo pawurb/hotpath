@@ -24,23 +24,20 @@ pub struct ConsoleArgs {
     )]
     pub metrics_port: u16,
 
-    #[arg(long, default_value_t = 200, help = "Refresh interval in milliseconds")]
+    #[arg(long, default_value_t = 500, help = "Refresh interval in milliseconds")]
     pub refresh_interval: u64,
 }
 
 impl ConsoleArgs {
     pub fn run(&self) -> Result<()> {
-        // Setup terminal
         enable_raw_mode()?;
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
 
-        // Create app state
         let mut app = App::new();
 
-        // Run the TUI
         let result = run_tui(
             &mut terminal,
             &mut app,
@@ -48,7 +45,6 @@ impl ConsoleArgs {
             self.refresh_interval,
         );
 
-        // Restore terminal
         disable_raw_mode()?;
         execute!(
             terminal.backend_mut(),
