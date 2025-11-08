@@ -16,6 +16,9 @@ pub use output::{
     MetricType, MetricsDataJson, MetricsJson, MetricsProvider, ProfilingMode, Reporter,
 };
 
+#[cfg(not(feature = "hotpath-off"))]
+pub(crate) mod http_server;
+
 // When hotpath is disabled with hotpath-off feature we import methods from lib_off, which are all no-op
 #[cfg(feature = "hotpath-off")]
 #[doc(inline)]

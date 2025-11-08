@@ -506,17 +506,24 @@ impl HotPath {
         let (tx, rx) = unbounded::<Measurement>();
         let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
         let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
+        let (query_tx, query_rx) = unbounded::<crossbeam_channel::Sender<output::MetricsJson>>();
         let start_time = Instant::now();
 
         let state_arc = Arc::new(RwLock::new(HotPathState {
             sender: Some(tx),
             shutdown_tx: Some(shutdown_tx),
             completion_rx: Some(Mutex::new(completion_rx)),
+            query_tx: Some(query_tx),
             start_time,
             caller_name,
-            percentiles,
+            percentiles: percentiles.clone(),
             limit,
         }));
+
+        let worker_start_time = start_time;
+        let worker_percentiles = percentiles.clone();
+        let worker_caller_name = caller_name;
+        let worker_limit = limit;
 
         thread::Builder::new()
             .name("hotpath-worker".into())
@@ -540,6 +547,22 @@ impl HotPath {
                             }
                             break;
                         }
+                        recv(query_rx) -> result => {
+                            if let Ok(response_tx) = result {
+                                // Create metrics snapshot
+                                use output::MetricsProvider;
+                                let total_elapsed = worker_start_time.elapsed();
+                                let metrics_provider = StatsData::new(
+                                    &local_stats,
+                                    total_elapsed,
+                                    worker_percentiles.clone(),
+                                    worker_caller_name,
+                                    worker_limit,
+                                );
+                                let metrics_json = output::MetricsJson::from(&metrics_provider as &dyn MetricsProvider);
+                                let _ = response_tx.send(metrics_json);
+                            }
+                        }
                     }
                 }
 
@@ -549,6 +572,13 @@ impl HotPath {
             .expect("Failed to spawn hotpath-worker thread");
 
         arc_swap.store(Some(Arc::clone(&state_arc)));
+
+        // Start HTTP metrics server if HOTPATH_HTTP_PORT is set
+        if let Ok(port_str) = std::env::var("HOTPATH_HTTP_PORT") {
+            if let Ok(port) = port_str.parse::<u16>() {
+                crate::http_server::start_metrics_server(port);
+            }
+        }
 
         // Override reporter with JsonReporter when hotpath-ci feature is enabled
         #[cfg(feature = "hotpath-ci")]

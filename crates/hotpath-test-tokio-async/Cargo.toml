@@ -10,6 +10,7 @@ tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 serde_json = "1.0"
+rand = "0.8"
 
 [features]
 default = []
@@ -83,3 +84,7 @@ path = "examples/main_timeout.rs"
 [[example]]
 name = "guard_timeout"
 path = "examples/guard_timeout.rs"
+
+[[example]]
+name = "long_running"
+path = "examples/long_running.rs"
