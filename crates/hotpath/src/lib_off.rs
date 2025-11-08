@@ -32,6 +32,12 @@ impl MeasurementGuard {
 
 pub struct HotPath;
 
+impl Default for HotPath {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HotPath {
     pub fn new() -> Self {
         Self {}
@@ -39,6 +45,7 @@ impl HotPath {
 }
 
 pub struct GuardBuilder {}
+use crate::Reporter;
 
 impl GuardBuilder {
     pub fn new(_caller_name: impl Into<String>) -> Self {
@@ -59,6 +66,14 @@ impl GuardBuilder {
 
     pub fn build(self) -> HotPath {
         HotPath
+    }
+
+    pub fn build_with_timeout(self, _duration: std::time::Duration) -> HotPath {
+        HotPath
+    }
+
+    pub fn reporter(self, _reporter: Box<dyn Reporter>) -> Self {
+        self
     }
 }
 

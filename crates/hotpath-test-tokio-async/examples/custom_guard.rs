@@ -26,7 +26,6 @@ async fn async_function(sleep: u64) {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(feature = "hotpath")]
     let _hotpath = hotpath::GuardBuilder::new("custom_guard::main")
         .percentiles(&[50, 90, 95])
         .build();
@@ -45,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // This will print the report.
+    #[allow(clippy::drop_non_drop)]
     #[cfg(feature = "hotpath")]
     drop(_hotpath);
 
