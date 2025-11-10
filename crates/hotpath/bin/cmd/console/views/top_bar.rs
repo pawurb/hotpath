@@ -7,7 +7,7 @@ use ratatui::{
 };
 use std::time::Instant;
 
-pub fn render_status_bar(
+pub(crate) fn render_status_bar(
     frame: &mut Frame,
     area: Rect,
     paused: bool,
@@ -32,7 +32,7 @@ pub fn render_status_bar(
         ])]
     } else {
         let refresh_time = last_refresh.elapsed().as_secs();
-        let status_symbol = if paused { "⏸ PAUSED" } else { "✓ Live" };
+        let status_symbol = if paused { "⏸ Paused" } else { "✓ Live" };
         let status_color = if paused { Color::Yellow } else { Color::Green };
 
         vec![Line::from(vec![
@@ -50,42 +50,4 @@ pub fn render_status_bar(
         Paragraph::new(status_text).block(Block::default().borders(Borders::ALL).title(" Status "));
 
     frame.render_widget(status_paragraph, area);
-}
-
-pub fn render_help_bar(frame: &mut Frame, area: Rect) {
-    let help_text = vec![Line::from(vec![
-        Span::styled(
-            "q",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Quit  "),
-        Span::styled(
-            "↑/k",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Up  "),
-        Span::styled(
-            "↓/j",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Down  "),
-        Span::styled(
-            "p",
-            Style::default()
-                .fg(Color::Cyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(": Pause/Resume"),
-    ])];
-
-    let help_paragraph =
-        Paragraph::new(help_text).block(Block::default().borders(Borders::ALL).title(" Controls "));
-
-    frame.render_widget(help_paragraph, area);
 }

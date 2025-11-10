@@ -1,7 +1,6 @@
 mod app;
 mod http;
 mod views;
-mod widgets;
 
 use app::App;
 use clap::Parser;
@@ -81,12 +80,18 @@ fn run_tui(
                     }
                     KeyCode::Char('j') | KeyCode::Down => {
                         app.next_function();
+                        app.update_and_fetch_samples(port);
                     }
                     KeyCode::Char('k') | KeyCode::Up => {
                         app.previous_function();
+                        app.update_and_fetch_samples(port);
                     }
                     KeyCode::Char('p') | KeyCode::Char('P') => {
                         app.toggle_pause();
+                    }
+                    KeyCode::Char('o') | KeyCode::Char('O') => {
+                        app.toggle_samples();
+                        app.fetch_samples_if_open(port);
                     }
                     _ => {}
                 }
@@ -103,6 +108,8 @@ fn run_tui(
                         app.set_error(format!("{}", e));
                     }
                 }
+
+                app.fetch_samples_if_open(port);
             }
 
             app.last_refresh = Instant::now();

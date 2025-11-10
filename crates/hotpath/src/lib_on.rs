@@ -1,9 +1,23 @@
 use crate::output;
-use crate::output::MetricsProvider;
+use crate::output::{MetricsJson, MetricsProvider, SamplesJson};
 
 #[doc(hidden)]
 pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure, measure_all, skip};
+
+use crossbeam_channel::Sender;
+use serde::{Deserialize, Serialize};
+
+/// Query request sent from HTTP server to worker thread
+pub enum QueryRequest {
+    /// Request full metrics snapshot
+    GetMetrics(Sender<MetricsJson>),
+    /// Request samples for a specific function (returns None if function not found)
+    GetSamples {
+        function_name: String,
+        response_tx: Sender<Option<SamplesJson>>,
+    },
+}
 
 cfg_if::cfg_if! {
     if #[cfg(any(
@@ -518,7 +532,7 @@ impl HotPath {
         let (tx, rx) = unbounded::<Measurement>();
         let (shutdown_tx, shutdown_rx) = bounded::<()>(1);
         let (completion_tx, completion_rx) = bounded::<HashMap<&'static str, FunctionStats>>(1);
-        let (query_tx, query_rx) = unbounded::<crossbeam_channel::Sender<output::MetricsJson>>();
+        let (query_tx, query_rx) = unbounded::<QueryRequest>();
         let start_time = Instant::now();
 
         let state_arc = Arc::new(RwLock::new(HotPathState {
@@ -562,19 +576,37 @@ impl HotPath {
                             break;
                         }
                         recv(query_rx) -> result => {
-                            if let Ok(response_tx) = result {
-                                // Create metrics snapshot
-                                use output::MetricsProvider;
-                                let total_elapsed = worker_start_time.elapsed();
-                                let metrics_provider = StatsData::new(
-                                    &local_stats,
-                                    total_elapsed,
-                                    worker_percentiles.clone(),
-                                    worker_caller_name,
-                                    worker_limit,
-                                );
-                                let metrics_json = output::MetricsJson::from(&metrics_provider as &dyn MetricsProvider);
-                                let _ = response_tx.send(metrics_json);
+                            if let Ok(query_request) = result {
+                                match query_request {
+                                    QueryRequest::GetMetrics(response_tx) => {
+                                        // Create metrics snapshot
+                                        use output::MetricsProvider;
+                                        let total_elapsed = worker_start_time.elapsed();
+                                        let metrics_provider = StatsData::new(
+                                            &local_stats,
+                                            total_elapsed,
+                                            worker_percentiles.clone(),
+                                            worker_caller_name,
+                                            worker_limit,
+                                        );
+                                        let metrics_json = MetricsJson::from(&metrics_provider as &dyn MetricsProvider);
+                                        let _ = response_tx.send(metrics_json);
+                                    }
+                                    QueryRequest::GetSamples { function_name, response_tx } => {
+                                        // Lookup function and extract samples
+                                        let response = if let Some(stats) = local_stats.get(function_name.as_str()) {
+                                            let samples: Vec<u64> = stats.recent_samples.iter().copied().collect();
+                                            Some(SamplesJson {
+                                                function_name,
+                                                samples: samples.clone(),
+                                                count: samples.len(),
+                                            })
+                                        } else {
+                                            None
+                                        };
+                                        let _ = response_tx.send(response);
+                                    }
+                                }
                             }
                         }
                     }

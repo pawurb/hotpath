@@ -86,7 +86,7 @@ pub(crate) struct HotPathState {
     pub sender: Option<Sender<Measurement>>,
     pub shutdown_tx: Option<Sender<()>>,
     pub completion_rx: Option<Mutex<Receiver<HashMap<&'static str, FunctionStats>>>>,
-    pub query_tx: Option<Sender<Sender<crate::output::MetricsJson>>>,
+    pub query_tx: Option<Sender<super::super::QueryRequest>>,
     pub start_time: Instant,
     pub caller_name: &'static str,
     pub percentiles: Vec<u8>,

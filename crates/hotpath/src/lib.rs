@@ -13,7 +13,8 @@ mod lib_on;
 #[allow(dead_code)]
 pub(crate) mod output;
 pub use output::{
-    MetricType, MetricsDataJson, MetricsJson, MetricsProvider, ProfilingMode, Reporter,
+    format_bytes, format_duration, MetricType, MetricsDataJson, MetricsJson, MetricsProvider,
+    ProfilingMode, Reporter, SamplesJson,
 };
 
 #[cfg(not(feature = "hotpath-off"))]
