@@ -1,6 +1,6 @@
 use crossbeam_channel::{Receiver, Sender};
 use hdrhistogram::Histogram;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -16,6 +16,7 @@ pub struct FunctionStats {
     pub has_unsupported_async: bool,
     pub wrapper: bool,
     pub cross_thread: bool,
+    pub recent_samples: VecDeque<u64>,
 }
 
 impl FunctionStats {
@@ -28,10 +29,14 @@ impl FunctionStats {
         unsupported_async: bool,
         wrapper: bool,
         cross_thread: bool,
+        recent_samples_limit: usize,
     ) -> Self {
         let count_total_hist =
             Histogram::<u64>::new_with_bounds(Self::LOW_COUNT, Self::HIGH_COUNT, Self::SIGFIGS)
                 .expect("count_total histogram init");
+
+        let mut recent_samples = VecDeque::with_capacity(recent_samples_limit);
+        recent_samples.push_back(count_total);
 
         let mut s = Self {
             count: 1,
@@ -40,6 +45,7 @@ impl FunctionStats {
             has_unsupported_async: unsupported_async,
             wrapper,
             cross_thread,
+            recent_samples,
         };
         s.record_alloc(count_total);
         s
@@ -60,6 +66,13 @@ impl FunctionStats {
         self.has_unsupported_async |= unsupported_async;
         self.cross_thread |= cross_thread;
         self.record_alloc(count_total);
+
+        if self.recent_samples.len() == self.recent_samples.capacity()
+            && self.recent_samples.capacity() > 0
+        {
+            self.recent_samples.pop_front();
+        }
+        self.recent_samples.push_back(count_total);
     }
 
     #[inline]
@@ -103,11 +116,13 @@ pub(crate) struct HotPathState {
     pub caller_name: &'static str,
     pub percentiles: Vec<u8>,
     pub limit: usize,
+    pub recent_samples_limit: usize,
 }
 
 pub(crate) fn process_measurement(
     stats: &mut HashMap<&'static str, FunctionStats>,
     m: Measurement,
+    recent_samples_limit: usize,
 ) {
     match m {
         Measurement::Allocation(name, count_total, unsupported_async, wrapper, cross_thread) => {
@@ -116,7 +131,13 @@ pub(crate) fn process_measurement(
             } else {
                 stats.insert(
                     name,
-                    FunctionStats::new_alloc(count_total, unsupported_async, wrapper, cross_thread),
+                    FunctionStats::new_alloc(
+                        count_total,
+                        unsupported_async,
+                        wrapper,
+                        cross_thread,
+                        recent_samples_limit,
+                    ),
                 );
             }
         }

@@ -450,7 +450,18 @@ impl GuardBuilder {
             ReporterConfig::None => Box::new(output::TableReporter),
         };
 
-        HotPath::new(self.caller_name, &self.percentiles, self.limit, reporter)
+        let recent_samples_limit = std::env::var("HOTPATH_RECENT_SAMPLES")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(50);
+
+        HotPath::new(
+            self.caller_name,
+            &self.percentiles,
+            self.limit,
+            reporter,
+            recent_samples_limit,
+        )
     }
 
     /// Builds the hotpath profiling guard and automatically drops it after the specified duration and exits the program.
@@ -494,6 +505,7 @@ impl HotPath {
         percentiles: &[u8],
         limit: usize,
         _reporter: Box<dyn Reporter>,
+        recent_samples_limit: usize,
     ) -> Self {
         let percentiles = percentiles.to_vec();
 
@@ -518,12 +530,14 @@ impl HotPath {
             caller_name,
             percentiles: percentiles.clone(),
             limit,
+            recent_samples_limit,
         }));
 
         let worker_start_time = start_time;
         let worker_percentiles = percentiles.clone();
         let worker_caller_name = caller_name;
         let worker_limit = limit;
+        let worker_recent_samples_limit = recent_samples_limit;
 
         thread::Builder::new()
             .name("hotpath-worker".into())
@@ -535,7 +549,7 @@ impl HotPath {
                         recv(rx) -> result => {
                             match result {
                                 Ok(measurement) => {
-                                    process_measurement(&mut local_stats, measurement);
+                                    process_measurement(&mut local_stats, measurement, worker_recent_samples_limit);
                                 }
                                 Err(_) => break, // Channel disconnected
                             }
@@ -543,7 +557,7 @@ impl HotPath {
                         recv(shutdown_rx) -> _ => {
                             // Process remaining messages after shutdown signal
                             while let Ok(measurement) = rx.try_recv() {
-                                process_measurement(&mut local_stats, measurement);
+                                process_measurement(&mut local_stats, measurement, worker_recent_samples_limit);
                             }
                             break;
                         }
