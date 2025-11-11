@@ -30,11 +30,11 @@ pub(crate) fn render_ui(frame: &mut Frame, app: &mut App) {
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(main_chunks[1]);
 
-        functions::render_functions_table(frame, app, content_chunks[0]);
-        samples::render_samples_panel(frame, content_chunks[1], app);
+        functions::render_functions_table(frame, app, content_chunks[0], app.focus);
+        samples::render_samples_panel(frame, content_chunks[1], app, app.focus);
     } else {
-        functions::render_functions_table(frame, app, main_chunks[1]);
+        functions::render_functions_table(frame, app, main_chunks[1], app.focus);
     }
 
-    bottom_bar::render_help_bar(frame, main_chunks[2]);
+    bottom_bar::render_help_bar(frame, main_chunks[2], app.focus, app.show_samples);
 }

@@ -1,6 +1,15 @@
+use crossterm::event::KeyCode;
 use hotpath::{MetricsJson, SamplesJson};
 use ratatui::widgets::TableState;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// Represents which UI component currently has focus
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Focus {
+    #[default]
+    Functions,
+    Samples,
+}
 
 pub(crate) struct App {
     pub(crate) metrics: MetricsJson,
@@ -12,10 +21,19 @@ pub(crate) struct App {
     pub(crate) show_samples: bool,
     pub(crate) current_samples: Option<SamplesJson>,
     pub(crate) pinned_function: Option<String>,
+    pub(crate) focus: Focus,
+    pub(crate) agent: ureq::Agent,
+    pub(crate) metrics_port: u16,
+    exit: bool,
 }
 
 impl App {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(metrics_port: u16) -> Self {
+        let config = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_millis(2000)))
+            .build();
+        let agent: ureq::Agent = config.into();
+
         Self {
             metrics: MetricsJson {
                 hotpath_profiling_mode: hotpath::ProfilingMode::Timing,
@@ -25,7 +43,7 @@ impl App {
                 percentiles: vec![95],
                 data: hotpath::MetricsDataJson(std::collections::HashMap::new()),
             },
-            table_state: TableState::default(),
+            table_state: TableState::default().with_selected(0),
             paused: false,
             last_refresh: Instant::now(),
             last_successful_fetch: None,
@@ -33,6 +51,10 @@ impl App {
             show_samples: false,
             current_samples: None,
             pinned_function: None,
+            focus: Focus::default(),
+            agent,
+            metrics_port,
+            exit: false,
         }
     }
 
@@ -43,13 +65,7 @@ impl App {
         }
 
         let i = match self.table_state.selected() {
-            Some(i) => {
-                if i >= function_count - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) => (i + 1).min(function_count - 1), // Bounded, stop at last
             None => 0,
         };
         self.table_state.select(Some(i));
@@ -62,13 +78,7 @@ impl App {
         }
 
         let i = match self.table_state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    function_count - 1
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => i.saturating_sub(1), // Bounded, stop at 0
             None => 0,
         };
         self.table_state.select(Some(i));
@@ -79,9 +89,37 @@ impl App {
     }
 
     pub(crate) fn update_metrics(&mut self, metrics: MetricsJson) {
+        // Capture the currently selected function name (not index!)
+        let selected_function_name = self.selected_function_name();
+
         self.metrics = metrics;
         self.last_successful_fetch = Some(Instant::now());
         self.error_message = None;
+
+        let sorted_entries = self.get_sorted_entries();
+
+        if let Some(function_name) = selected_function_name {
+            // Find the new index of the previously selected function in sorted order
+            if let Some(new_idx) = sorted_entries
+                .iter()
+                .position(|(name, _)| name == &function_name)
+            {
+                self.table_state.select(Some(new_idx));
+            } else {
+                // Function no longer exists, select the last one
+                if !sorted_entries.is_empty() {
+                    self.table_state.select(Some(sorted_entries.len() - 1));
+                }
+            }
+        } else if let Some(selected) = self.table_state.selected() {
+            // Bound check: if current selection is now out of bounds
+            if selected >= sorted_entries.len() && !sorted_entries.is_empty() {
+                self.table_state.select(Some(sorted_entries.len() - 1));
+            }
+        } else if !sorted_entries.is_empty() {
+            // No selection yet, select first item
+            self.table_state.select(Some(0));
+        }
     }
 
     pub(crate) fn set_error(&mut self, error: String) {
@@ -99,10 +137,52 @@ impl App {
         }
     }
 
+    /// Get sorted entries (sorted by percentage, highest first)
+    pub(crate) fn get_sorted_entries(&self) -> Vec<(String, Vec<hotpath::MetricType>)> {
+        use hotpath::MetricType;
+
+        let mut entries: Vec<(String, Vec<MetricType>)> = self
+            .metrics
+            .data
+            .0
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        entries.sort_by(|(_, metrics_a), (_, metrics_b)| {
+            let percent_a = metrics_a
+                .iter()
+                .find_map(|m| {
+                    if let MetricType::Percentage(p) = m {
+                        Some(*p)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+
+            let percent_b = metrics_b
+                .iter()
+                .find_map(|m| {
+                    if let MetricType::Percentage(p) = m {
+                        Some(*p)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or(0);
+
+            percent_b.cmp(&percent_a)
+        });
+
+        entries
+    }
+
     pub(crate) fn selected_function_name(&self) -> Option<String> {
+        let sorted_entries = self.get_sorted_entries();
         self.table_state
             .selected()
-            .and_then(|idx| self.metrics.data.0.keys().nth(idx).map(|s| s.to_string()))
+            .and_then(|idx| sorted_entries.get(idx).map(|(name, _)| name.clone()))
     }
 
     pub(crate) fn update_samples(&mut self, samples: SamplesJson) {
@@ -127,7 +207,7 @@ impl App {
     pub(crate) fn fetch_samples_if_open(&mut self, port: u16) {
         if self.show_samples {
             if let Some(function_name) = self.samples_function_name() {
-                match super::http::fetch_samples(port, function_name) {
+                match super::http::fetch_samples(&self.agent, port, function_name) {
                     Ok(samples) => self.update_samples(samples),
                     Err(_) => self.clear_samples(),
                 }
@@ -139,5 +219,94 @@ impl App {
     pub(crate) fn update_and_fetch_samples(&mut self, port: u16) {
         self.update_pinned_function();
         self.fetch_samples_if_open(port);
+    }
+
+    /// Switch focus to samples panel
+    pub(crate) fn focus_samples(&mut self) {
+        if !self.show_samples {
+            self.toggle_samples();
+        }
+        self.focus = Focus::Samples;
+    }
+
+    /// Switch focus to functions panel
+    pub(crate) fn focus_functions(&mut self) {
+        self.focus = Focus::Functions;
+    }
+
+    pub(crate) fn exit(&mut self) {
+        self.exit = true;
+    }
+
+    fn refresh_data(&mut self) {
+        match super::http::fetch_metrics(&self.agent, self.metrics_port) {
+            Ok(metrics) => {
+                self.update_metrics(metrics);
+            }
+            Err(e) => {
+                self.set_error(format!("{}", e));
+            }
+        }
+
+        self.fetch_samples_if_open(self.metrics_port);
+        self.last_refresh = Instant::now();
+    }
+
+    pub(crate) fn run(
+        &mut self,
+        terminal: &mut ratatui::Terminal<ratatui::backend::CrosstermBackend<std::io::Stdout>>,
+        refresh_interval_ms: u64,
+    ) -> std::io::Result<()> {
+        use crossterm::event::{self, Event, KeyEventKind};
+
+        let refresh_interval = Duration::from_millis(refresh_interval_ms);
+
+        self.refresh_data();
+
+        while !self.exit {
+            if !self.paused && self.last_refresh.elapsed() >= refresh_interval {
+                self.refresh_data();
+            }
+
+            terminal.draw(|frame| super::views::render_ui(frame, self))?;
+
+            if event::poll(Duration::from_millis(100))? {
+                if let Event::Key(key_event) = event::read()? {
+                    if key_event.kind == KeyEventKind::Press {
+                        self.handle_key_event(key_event.code);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_code: KeyCode) {
+        match key_code {
+            KeyCode::Char('q') | KeyCode::Char('Q') => self.exit(),
+            KeyCode::Char('p') | KeyCode::Char('P') => self.toggle_pause(),
+            KeyCode::Char('o') | KeyCode::Char('O') => {
+                self.toggle_samples();
+                self.fetch_samples_if_open(self.metrics_port);
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.next_function();
+                self.update_and_fetch_samples(self.metrics_port);
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.previous_function();
+                self.update_and_fetch_samples(self.metrics_port);
+            }
+            KeyCode::Tab => {
+                if self.show_samples {
+                    match self.focus {
+                        Focus::Functions => self.focus_samples(),
+                        Focus::Samples => self.focus_functions(),
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 }

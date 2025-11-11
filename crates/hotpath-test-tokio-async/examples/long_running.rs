@@ -3,64 +3,105 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn fast_sync_allocator() -> Vec<u64> {
+fn fast_sync_allocator() -> Vec<Vec<u64>> {
     let mut rng = rand::thread_rng();
-    let size = rng.gen_range(10..100);
-    let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
-    std::hint::black_box(&data);
+    let num_arrays = rng.gen_range(1..=10);
+    let mut arrays = Vec::new();
+
+    for _ in 0..num_arrays {
+        let size = rng.gen_range(10..100);
+        let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
+        std::hint::black_box(&data);
+        arrays.push(data);
+    }
+
     std::thread::sleep(Duration::from_micros(rng.gen_range(10..50)));
-    data
+    arrays
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn medium_sync_allocator() -> Vec<u64> {
+fn medium_sync_allocator() -> Vec<Vec<u64>> {
     let mut rng = rand::thread_rng();
-    let size = rng.gen_range(100..1000);
-    let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
-    std::hint::black_box(&data);
+    let num_arrays = rng.gen_range(1..=10);
+    let mut arrays = Vec::new();
+
+    for _ in 0..num_arrays {
+        let size = rng.gen_range(100..1000);
+        let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
+        std::hint::black_box(&data);
+        arrays.push(data);
+    }
+
     std::thread::sleep(Duration::from_micros(rng.gen_range(50..150)));
-    data
+    arrays
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn slow_sync_allocator() -> Vec<u64> {
+fn slow_sync_allocator() -> Vec<Vec<u64>> {
     let mut rng = rand::thread_rng();
-    let size = rng.gen_range(1000..10000);
-    let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
-    std::hint::black_box(&data);
+    let num_arrays = rng.gen_range(1..=10);
+    let mut arrays = Vec::new();
+
+    for _ in 0..num_arrays {
+        let size = rng.gen_range(1000..10000);
+        let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
+        std::hint::black_box(&data);
+        arrays.push(data);
+    }
+
     std::thread::sleep(Duration::from_micros(rng.gen_range(100..300)));
-    data
+    arrays
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-async fn fast_async_allocator() -> Vec<u64> {
+async fn fast_async_allocator() -> Vec<Vec<u64>> {
     let mut rng = rand::thread_rng();
-    let size = rng.gen_range(10..100);
-    let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
-    std::hint::black_box(&data);
+    let num_arrays = rng.gen_range(1..=10);
+    let mut arrays = Vec::new();
+
+    for _ in 0..num_arrays {
+        let size = rng.gen_range(10..100);
+        let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
+        std::hint::black_box(&data);
+        arrays.push(data);
+    }
+
     sleep(Duration::from_micros(rng.gen_range(10..50))).await;
-    data
+    arrays
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-async fn slow_async_allocator() -> Vec<u64> {
+async fn slow_async_allocator() -> Vec<Vec<u64>> {
     let mut rng = rand::thread_rng();
-    let size = rng.gen_range(1000..5000);
-    let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
-    std::hint::black_box(&data);
+    let num_arrays = rng.gen_range(1..=10);
+    let mut arrays = Vec::new();
+
+    for _ in 0..num_arrays {
+        let size = rng.gen_range(1000..5000);
+        let data: Vec<u64> = (0..size).map(|_| rng.gen()).collect();
+        std::hint::black_box(&data);
+        arrays.push(data);
+    }
+
     sleep(Duration::from_micros(rng.gen_range(100..400))).await;
-    data
+    arrays
 }
 
 #[cfg_attr(feature = "hotpath", hotpath::measure)]
-fn process_data(data: Vec<u64>) -> u64 {
+fn process_data(arrays: Vec<Vec<u64>>) -> u64 {
     let mut rng = rand::thread_rng();
-    let sum: u64 = data
-        .iter()
-        .take(rng.gen_range(5..20))
-        .fold(0u64, |acc, &x| acc.wrapping_add(x % 1000));
-    std::hint::black_box(sum);
-    sum
+    let mut total_sum = 0u64;
+
+    for data in arrays {
+        let sum: u64 = data
+            .iter()
+            .take(rng.gen_range(5..20))
+            .fold(0u64, |acc, &x| acc.wrapping_add(x % 1000));
+        total_sum = total_sum.wrapping_add(sum);
+    }
+
+    std::hint::black_box(total_sum);
+    total_sum
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -83,6 +124,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
 
+        let mut rng = rand::thread_rng();
+
+        // Call allocator functions which now randomly allocate 1-10 arrays each
         let data1 = fast_sync_allocator();
         let data2 = medium_sync_allocator();
 
@@ -105,7 +149,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             process_data(data2);
         }
 
-        let mut rng = rand::thread_rng();
         sleep(Duration::from_millis(rng.gen_range(10..50))).await;
 
         #[cfg(feature = "hotpath")]

@@ -91,7 +91,6 @@ pub(crate) struct HotPathState {
     pub caller_name: &'static str,
     pub percentiles: Vec<u8>,
     pub limit: usize,
-    pub recent_samples_limit: usize,
 }
 
 pub(crate) fn process_measurement(

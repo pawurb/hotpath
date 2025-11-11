@@ -6,7 +6,6 @@ pub use cfg_if::cfg_if;
 pub use hotpath_macros::{main, measure, measure_all, skip};
 
 use crossbeam_channel::Sender;
-use serde::{Deserialize, Serialize};
 
 /// Query request sent from HTTP server to worker thread
 pub enum QueryRequest {
@@ -544,7 +543,6 @@ impl HotPath {
             caller_name,
             percentiles: percentiles.clone(),
             limit,
-            recent_samples_limit,
         }));
 
         let worker_start_time = start_time;
