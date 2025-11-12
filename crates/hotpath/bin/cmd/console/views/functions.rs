@@ -42,7 +42,9 @@ pub(crate) fn render_functions_table(frame: &mut Frame, app: &mut App, area: Rec
     let entries = app.get_sorted_entries();
 
     let rows = entries.iter().map(|(function_name, metrics)| {
-        let cells = std::iter::once(Cell::from(function_name.as_str()))
+        let short_name = hotpath::shorten_function_name(function_name);
+
+        let cells = std::iter::once(Cell::from(short_name))
             .chain(metrics.iter().map(|m| Cell::from(format!("{}", m))))
             .collect::<Vec<_>>();
 

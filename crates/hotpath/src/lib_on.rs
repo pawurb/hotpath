@@ -7,7 +7,7 @@ pub use hotpath_macros::{main, measure, measure_all, skip};
 
 use crossbeam_channel::Sender;
 
-/// Query request sent from HTTP server to worker thread
+/// Query request sent from TUI HTTP server to profiler worker thread
 pub enum QueryRequest {
     /// Request full metrics snapshot
     GetMetrics(Sender<MetricsJson>),

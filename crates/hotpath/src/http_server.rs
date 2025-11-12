@@ -71,7 +71,6 @@ fn respond_internal_error(request: Request, e: impl Display) {
 }
 
 fn handle_samples_request(request: Request, encoded_key: &str) {
-    // Decode base64-encoded function name
     let function_name = match base64_decode(encoded_key) {
         Ok(name) => name,
         Err(e) => {

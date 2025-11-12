@@ -31,7 +31,6 @@ pub(crate) fn render_samples_panel(frame: &mut Frame, area: Rect, app: &App) {
         ));
 
     if let Some(ref samples_data) = app.current_samples {
-        // Display actual samples
         let items: Vec<ListItem> = samples_data
             .samples
             .iter()

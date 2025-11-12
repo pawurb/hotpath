@@ -121,7 +121,7 @@ pub fn format_bytes(bytes: u64) -> String {
     }
 }
 
-pub(crate) fn format_function_name(function_name: &str) -> String {
+pub fn shorten_function_name(function_name: &str) -> String {
     let parts: Vec<&str> = function_name.split("::").collect();
     if parts.len() > 2 {
         parts[parts.len() - 2..].join("::")
@@ -502,7 +502,8 @@ pub(crate) fn display_table(metrics_provider: &dyn MetricsProvider<'_>) {
     for (function_name, metrics) in sorted_entries {
         let mut row_cells = Vec::new();
 
-        row_cells.push(Cell::new(&function_name));
+        let short_name = shorten_function_name(&function_name);
+        row_cells.push(Cell::new(&short_name));
 
         for metric in &metrics {
             row_cells.push(Cell::new(&metric.to_string()));
