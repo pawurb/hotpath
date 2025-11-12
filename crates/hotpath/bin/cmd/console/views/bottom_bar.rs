@@ -1,4 +1,3 @@
-use super::super::app::Focus;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -7,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-pub(crate) fn render_help_bar(frame: &mut Frame, area: Rect, focus: Focus, show_samples: bool) {
+pub(crate) fn render_help_bar(frame: &mut Frame, area: Rect) {
     let spans = vec![
         Span::raw("Quit "),
         Span::styled(

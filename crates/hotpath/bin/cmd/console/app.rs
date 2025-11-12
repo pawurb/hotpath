@@ -3,14 +3,6 @@ use hotpath::{MetricsJson, SamplesJson};
 use ratatui::widgets::TableState;
 use std::time::{Duration, Instant};
 
-/// Represents which UI component currently has focus
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum Focus {
-    #[default]
-    Functions,
-    Samples,
-}
-
 pub(crate) struct App {
     pub(crate) metrics: MetricsJson,
     pub(crate) table_state: TableState,
@@ -21,7 +13,6 @@ pub(crate) struct App {
     pub(crate) show_samples: bool,
     pub(crate) current_samples: Option<SamplesJson>,
     pub(crate) pinned_function: Option<String>,
-    pub(crate) focus: Focus,
     pub(crate) agent: ureq::Agent,
     pub(crate) metrics_port: u16,
     exit: bool,
@@ -51,7 +42,6 @@ impl App {
             show_samples: false,
             current_samples: None,
             pinned_function: None,
-            focus: Focus::default(),
             agent,
             metrics_port,
             exit: false,
@@ -219,19 +209,6 @@ impl App {
     pub(crate) fn update_and_fetch_samples(&mut self, port: u16) {
         self.update_pinned_function();
         self.fetch_samples_if_open(port);
-    }
-
-    /// Switch focus to samples panel
-    pub(crate) fn focus_samples(&mut self) {
-        if !self.show_samples {
-            self.toggle_samples();
-        }
-        self.focus = Focus::Samples;
-    }
-
-    /// Switch focus to functions panel
-    pub(crate) fn focus_functions(&mut self) {
-        self.focus = Focus::Functions;
     }
 
     pub(crate) fn exit(&mut self) {

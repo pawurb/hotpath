@@ -1,4 +1,4 @@
-use super::super::app::{App, Focus};
+use super::super::app::App;
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-pub(crate) fn render_samples_panel(frame: &mut Frame, area: Rect, app: &App, focus: Focus) {
+pub(crate) fn render_samples_panel(frame: &mut Frame, area: Rect, app: &App) {
     let title = if let Some(ref samples) = app.current_samples {
         format!(" {} ", samples.function_name)
     } else if app.selected_function_name().is_some() {
@@ -17,19 +17,8 @@ pub(crate) fn render_samples_panel(frame: &mut Frame, area: Rect, app: &App, foc
         " Recent Samples ".to_string()
     };
 
-    let is_focused = matches!(focus, Focus::Samples);
-
-    let border_type = if is_focused {
-        BorderType::Thick
-    } else {
-        BorderType::Plain
-    };
-
-    let block_style = if is_focused {
-        Style::default()
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
+    let border_type = BorderType::Plain;
+    let block_style = Style::default();
 
     let block = Block::bordered()
         .border_type(border_type)

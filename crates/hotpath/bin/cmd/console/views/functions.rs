@@ -1,4 +1,4 @@
-use super::super::app::{App, Focus};
+use super::super::app::App;
 use ratatui::{
     layout::{Constraint, Rect},
     style::{Color, Modifier, Style},
@@ -8,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-pub(crate) fn render_functions_table(frame: &mut Frame, app: &mut App, area: Rect, focus: Focus) {
+pub(crate) fn render_functions_table(frame: &mut Frame, app: &mut App, area: Rect) {
     let title = format!(
         " {} - {} ",
         app.metrics.caller_name, app.metrics.description
@@ -37,37 +37,20 @@ pub(crate) fn render_functions_table(frame: &mut Frame, app: &mut App, area: Rec
     })
     .collect::<Vec<_>>();
 
-    let header = Row::new(header_cells).height(1).bottom_margin(1);
+    let header = Row::new(header_cells).height(1);
 
     let entries = app.get_sorted_entries();
-
-    let is_focused = matches!(focus, Focus::Functions);
 
     let rows = entries.iter().map(|(function_name, metrics)| {
         let cells = std::iter::once(Cell::from(function_name.as_str()))
             .chain(metrics.iter().map(|m| Cell::from(format!("{}", m))))
             .collect::<Vec<_>>();
 
-        let row = Row::new(cells);
-        // Dim the row if not focused and samples panel is open
-        if app.show_samples && !is_focused {
-            row.style(Style::default().fg(Color::DarkGray))
-        } else {
-            row
-        }
+        Row::new(cells)
     });
 
-    let border_type = if is_focused {
-        BorderType::Thick
-    } else {
-        BorderType::Plain
-    };
-
-    let block_style = if is_focused {
-        Style::default()
-    } else {
-        Style::default().fg(Color::DarkGray)
-    };
+    let border_type = BorderType::Thick;
+    let block_style = Style::default();
 
     let num_percentiles = app.metrics.percentiles.len();
 
