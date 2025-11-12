@@ -70,8 +70,7 @@ impl fmt::Display for MetricType {
                 write!(f, "{}", count)
             }
             MetricType::DurationNs(ns) => {
-                let duration = Duration::from_nanos(*ns);
-                write!(f, "{:.2?}", duration)
+                write!(f, "{}", format_duration(*ns))
             }
             MetricType::AllocBytes(bytes) => {
                 write!(f, "{}", format_bytes(*bytes))
@@ -89,7 +88,21 @@ impl fmt::Display for MetricType {
     }
 }
 
-fn format_bytes(bytes: u64) -> String {
+/// Formats a duration in nanoseconds into a human-readable string with appropriate units.
+pub fn format_duration(ns: u64) -> String {
+    if ns < 1_000 {
+        format!("{} ns", ns)
+    } else if ns < 1_000_000 {
+        format!("{:.2} µs", ns as f64 / 1_000.0)
+    } else if ns < 1_000_000_000 {
+        format!("{:.2} ms", ns as f64 / 1_000_000.0)
+    } else {
+        format!("{:.2} s", ns as f64 / 1_000_000_000.0)
+    }
+}
+
+/// Formats a byte count into a human-readable string with appropriate units.
+pub fn format_bytes(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
     const THRESHOLD: f64 = 1024.0;
 
@@ -108,7 +121,7 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-pub(crate) fn format_function_name(function_name: &str) -> String {
+pub fn shorten_function_name(function_name: &str) -> String {
     let parts: Vec<&str> = function_name.split("::").collect();
     if parts.len() > 2 {
         parts[parts.len() - 2..].join("::")
@@ -178,6 +191,14 @@ impl fmt::Display for ProfilingMode {
             ProfilingMode::AllocCountTotal => write!(f, "alloc_count_total"),
         }
     }
+}
+
+/// Response containing recent samples for a function
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SamplesJson {
+    pub function_name: String,
+    pub samples: Vec<u64>,
+    pub count: usize,
 }
 
 /// JSON representation of profiling metrics.
@@ -481,7 +502,8 @@ pub(crate) fn display_table(metrics_provider: &dyn MetricsProvider<'_>) {
     for (function_name, metrics) in sorted_entries {
         let mut row_cells = Vec::new();
 
-        row_cells.push(Cell::new(&function_name));
+        let short_name = shorten_function_name(&function_name);
+        row_cells.push(Cell::new(&short_name));
 
         for metric in &metrics {
             row_cells.push(Cell::new(&metric.to_string()));

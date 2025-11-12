@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::ProfilingMode;
 
-use super::super::output::{format_function_name, MetricType, MetricsProvider};
+use super::super::output::{MetricType, MetricsProvider};
 use super::state::FunctionStats;
 
 pub struct StatsData<'a> {
@@ -65,8 +65,6 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
         entries
             .into_iter()
             .map(|(function_name, stats)| {
-                let short_name = format_function_name(function_name);
-
                 let percentage = if reference_total > 0 {
                     (stats.total_duration_ns as f64 / reference_total as f64) * 100.0
                 } else {
@@ -86,7 +84,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
                 metrics.push(MetricType::DurationNs(stats.total_duration_ns));
                 metrics.push(MetricType::Percentage((percentage * 100.0) as u64));
 
-                (short_name, metrics)
+                (function_name.to_string(), metrics)
             })
             .collect()
     }

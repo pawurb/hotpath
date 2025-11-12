@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use super::super::output::{format_function_name, MetricType, MetricsProvider};
+use super::super::output::{MetricType, MetricsProvider};
 use super::state::FunctionStats;
 use crate::ProfilingMode;
 
@@ -113,8 +113,6 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
         filtered_stats
             .into_iter()
             .map(|(function_name, stats)| {
-                let short_name = format_function_name(function_name);
-
                 let percentage = if grand_total_count > 0 {
                     (stats.total_count() as f64 / grand_total_count as f64) * 100.0
                 } else {
@@ -147,7 +145,7 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
                     metrics.push(MetricType::Percentage((percentage * 100.0) as u64));
                 }
 
-                (short_name, metrics)
+                (function_name.to_string(), metrics)
             })
             .collect()
     }

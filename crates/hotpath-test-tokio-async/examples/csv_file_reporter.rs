@@ -67,6 +67,7 @@ impl Reporter for FileReporter {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "hotpath")]
     let _hotpath = hotpath::GuardBuilder::new("main")
         .percentiles(&[50, 90, 95])
         .reporter(Box::new(FileReporter))

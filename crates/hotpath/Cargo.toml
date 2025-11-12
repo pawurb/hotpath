@@ -20,19 +20,24 @@ hotpath-alloc-count-total = ["dep:tokio"]
 hotpath-alloc-self = []
 hotpath-off = []
 hotpath-ci = []
+tui = ["dep:ratatui", "dep:crossterm"]
 
 [dependencies]
 arc-swap = "1.7"
+base64 = "0.22"
 cfg-if = "1.0"
 clap = { version = "4.5", features = ["derive"] }
 colored = { version = "3" }
 crossbeam-channel = "0.5"
+crossterm = { version = "0.29", optional = true }
 eyre = "0.6"
 hdrhistogram = { version = "7.5", default-features = false }
 hotpath-macros = { workspace = true }
 prettytable-rs = { version = "0.10", default-features = false }
 quanta = "0.12"
+ratatui = { version = "0.29", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+tiny_http = "0.12"
 tokio = { version = "1.47", features = ["rt"], optional = true }
 ureq = { version = "3.1", features = ["json"] }
