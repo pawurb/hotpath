@@ -298,14 +298,6 @@ impl App {
                 self.previous_function();
                 self.update_and_fetch_samples(self.metrics_port);
             }
-            KeyCode::Tab => {
-                if self.show_samples {
-                    match self.focus {
-                        Focus::Functions => self.focus_samples(),
-                        Focus::Samples => self.focus_functions(),
-                    }
-                }
-            }
             _ => {}
         }
     }

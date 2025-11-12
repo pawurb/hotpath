@@ -38,9 +38,8 @@ fn handle_request(request: Request) {
     if path == "/metrics" {
         let metrics = get_current_metrics();
         respond_json(request, &metrics);
-    } else if path.starts_with("/samples/") {
-        let encoded_key = path[9..].to_string(); // Skip "/samples/"
-        handle_samples_request(request, &encoded_key);
+    } else if let Some(encoded_key) = path.strip_prefix("/samples/") {
+        handle_samples_request(request, encoded_key);
     } else {
         respond_error(request, 404, "Not found");
     }

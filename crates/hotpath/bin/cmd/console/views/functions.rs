@@ -71,8 +71,6 @@ pub(crate) fn render_functions_table(frame: &mut Frame, app: &mut App, area: Rec
 
     let num_percentiles = app.metrics.percentiles.len();
 
-    // Calculate column widths as percentages
-    // Function column gets more space, other columns share the rest
     let function_pct: u16 = 35;
     let remaining_pct: u16 = 100 - function_pct;
     let num_other_cols = (4 + num_percentiles) as u16; // Calls, Avg, P95s, Total, % Total
