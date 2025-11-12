@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 pub enum Measurement {
-    Duration(u64, &'static str, bool), // duration_ns, function_name, wrapper
+    Duration(u64, Duration, &'static str, bool), // duration_ns, elapsed_since_start, function_name, wrapper
 }
 
 #[derive(Debug)]
@@ -15,7 +15,7 @@ pub struct FunctionStats {
     hist: Option<Histogram<u64>>,
     pub has_data: bool,
     pub wrapper: bool,
-    pub recent_samples: VecDeque<u64>,
+    pub recent_samples: VecDeque<(u64, Duration)>,
 }
 
 impl FunctionStats {
@@ -23,12 +23,17 @@ impl FunctionStats {
     const HIGH_NS: u64 = 1_000_000_000_000; // 1000s
     const SIGFIGS: u8 = 3;
 
-    pub fn new_duration(first_ns: u64, wrapper: bool, recent_samples_limit: usize) -> Self {
+    pub fn new_duration(
+        first_ns: u64,
+        elapsed: Duration,
+        wrapper: bool,
+        recent_samples_limit: usize,
+    ) -> Self {
         let hist = Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
             .expect("hdrhistogram init");
 
         let mut recent_samples = VecDeque::with_capacity(recent_samples_limit);
-        recent_samples.push_back(first_ns);
+        recent_samples.push_back((first_ns, elapsed));
 
         let mut s = Self {
             total_duration_ns: first_ns,
@@ -50,7 +55,7 @@ impl FunctionStats {
         }
     }
 
-    pub fn update_duration(&mut self, duration_ns: u64) {
+    pub fn update_duration(&mut self, duration_ns: u64, elapsed: Duration) {
         self.total_duration_ns += duration_ns;
         self.count += 1;
         self.record_time(duration_ns);
@@ -60,7 +65,7 @@ impl FunctionStats {
         {
             self.recent_samples.pop_front();
         }
-        self.recent_samples.push_back(duration_ns);
+        self.recent_samples.push_back((duration_ns, elapsed));
     }
 
     pub fn avg_duration_ns(&self) -> u64 {
@@ -99,13 +104,18 @@ pub(crate) fn process_measurement(
     recent_samples_limit: usize,
 ) {
     match m {
-        Measurement::Duration(duration_ns, name, wrapper) => {
+        Measurement::Duration(duration_ns, elapsed, name, wrapper) => {
             if let Some(s) = stats.get_mut(name) {
-                s.update_duration(duration_ns);
+                s.update_duration(duration_ns, elapsed);
             } else {
                 stats.insert(
                     name,
-                    FunctionStats::new_duration(duration_ns, wrapper, recent_samples_limit),
+                    FunctionStats::new_duration(
+                        duration_ns,
+                        elapsed,
+                        wrapper,
+                        recent_samples_limit,
+                    ),
                 );
             }
         }
@@ -132,6 +142,7 @@ pub fn send_duration_measurement(name: &'static str, duration: Duration, wrapper
         return;
     };
 
-    let measurement = Measurement::Duration(duration.as_nanos() as u64, name, wrapper);
+    let elapsed = state_guard.start_time.elapsed();
+    let measurement = Measurement::Duration(duration.as_nanos() as u64, elapsed, name, wrapper);
     let _ = sender.try_send(measurement);
 }

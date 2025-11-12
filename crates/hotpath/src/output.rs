@@ -194,10 +194,11 @@ impl fmt::Display for ProfilingMode {
 }
 
 /// Response containing recent samples for a function
+/// Each sample is a tuple of (value, elapsed_nanos)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SamplesJson {
     pub function_name: String,
-    pub samples: Vec<u64>,
+    pub samples: Vec<(u64, u64)>,
     pub count: usize,
 }
 

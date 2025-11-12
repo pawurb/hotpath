@@ -2,10 +2,10 @@ use crossbeam_channel::{Receiver, Sender};
 use hdrhistogram::Histogram;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub enum Measurement {
-    Allocation(&'static str, u64, bool, bool, bool), // function_name, bytes_total, unsupported_async, wrapper, cross_thread
+    Allocation(&'static str, u64, Duration, bool, bool, bool), // function_name, bytes_total, elapsed_since_start, unsupported_async, wrapper, cross_thread
 }
 
 #[derive(Debug, Clone)]
@@ -16,7 +16,7 @@ pub struct FunctionStats {
     pub has_unsupported_async: bool,
     pub wrapper: bool,
     pub cross_thread: bool,
-    pub recent_samples: VecDeque<u64>,
+    pub recent_samples: VecDeque<(u64, Duration)>,
 }
 
 impl FunctionStats {
@@ -26,6 +26,7 @@ impl FunctionStats {
 
     pub fn new_alloc(
         bytes_total: u64,
+        elapsed: Duration,
         unsupported_async: bool,
         wrapper: bool,
         cross_thread: bool,
@@ -36,7 +37,7 @@ impl FunctionStats {
                 .expect("bytes_total histogram init");
 
         let mut recent_samples = VecDeque::with_capacity(recent_samples_limit);
-        recent_samples.push_back(bytes_total);
+        recent_samples.push_back((bytes_total, elapsed));
 
         let mut s = Self {
             count: 1,
@@ -61,7 +62,13 @@ impl FunctionStats {
         }
     }
 
-    pub fn update_alloc(&mut self, bytes_total: u64, unsupported_async: bool, cross_thread: bool) {
+    pub fn update_alloc(
+        &mut self,
+        bytes_total: u64,
+        elapsed: Duration,
+        unsupported_async: bool,
+        cross_thread: bool,
+    ) {
         self.count += 1;
         self.has_unsupported_async |= unsupported_async;
         self.cross_thread |= cross_thread;
@@ -72,7 +79,7 @@ impl FunctionStats {
         {
             self.recent_samples.pop_front();
         }
-        self.recent_samples.push_back(bytes_total);
+        self.recent_samples.push_back((bytes_total, elapsed));
     }
 
     #[inline]
@@ -124,14 +131,22 @@ pub(crate) fn process_measurement(
     recent_samples_limit: usize,
 ) {
     match m {
-        Measurement::Allocation(name, bytes_total, unsupported_async, wrapper, cross_thread) => {
+        Measurement::Allocation(
+            name,
+            bytes_total,
+            elapsed,
+            unsupported_async,
+            wrapper,
+            cross_thread,
+        ) => {
             if let Some(s) = stats.get_mut(name) {
-                s.update_alloc(bytes_total, unsupported_async, cross_thread);
+                s.update_alloc(bytes_total, elapsed, unsupported_async, cross_thread);
             } else {
                 stats.insert(
                     name,
                     FunctionStats::new_alloc(
                         bytes_total,
+                        elapsed,
                         unsupported_async,
                         wrapper,
                         cross_thread,
@@ -169,7 +184,14 @@ pub fn send_alloc_measurement(
         return;
     };
 
-    let measurement =
-        Measurement::Allocation(name, bytes_total, unsupported_async, wrapper, cross_thread);
+    let elapsed = state_guard.start_time.elapsed();
+    let measurement = Measurement::Allocation(
+        name,
+        bytes_total,
+        elapsed,
+        unsupported_async,
+        wrapper,
+        cross_thread,
+    );
     let _ = sender.try_send(measurement);
 }

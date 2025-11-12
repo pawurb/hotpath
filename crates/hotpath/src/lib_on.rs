@@ -591,13 +591,16 @@ impl HotPath {
                                         let _ = response_tx.send(metrics_json);
                                     }
                                     QueryRequest::GetSamples { function_name, response_tx } => {
-                                        // Lookup function and extract samples
                                         let response = if let Some(stats) = local_stats.get(function_name.as_str()) {
-                                            let samples: Vec<u64> = stats.recent_samples.iter().copied().collect();
+                                            let samples: Vec<(u64, u64)> = stats.recent_samples
+                                                .iter()
+                                                .rev()
+                                                .map(|(val, elapsed)| (*val, elapsed.as_nanos() as u64))
+                                                .collect();
                                             Some(SamplesJson {
                                                 function_name,
-                                                samples: samples.clone(),
-                                                count: samples.len(),
+                                                samples,
+                                                count: stats.recent_samples.len(),
                                             })
                                         } else {
                                             None
