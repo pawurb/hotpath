@@ -43,12 +43,9 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
     }
 
     fn description(&self) -> String {
-        #[cfg(feature = "hotpath-alloc-self")]
-        {
+        if super::super::alloc::shared::is_alloc_self_enabled() {
             "Exclusive heap allocations by each function (excluding nested calls).".to_string()
-        }
-        #[cfg(not(feature = "hotpath-alloc-self"))]
-        {
+        } else {
             "Total number of heap allocations during each function call (including nested calls)."
                 .to_string()
         }
@@ -72,17 +69,13 @@ impl<'a> MetricsProvider<'a> for StatsData<'a> {
             filtered_stats
         };
 
-        #[cfg(feature = "hotpath-alloc-self")]
-        let grand_total_count: u64 = {
+        let grand_total_count: u64 = if super::super::alloc::shared::is_alloc_self_enabled() {
             self.stats
                 .iter()
                 .filter(|(_, s)| s.has_data)
                 .map(|(_, stats)| stats.total_count())
                 .sum()
-        };
-
-        #[cfg(not(feature = "hotpath-alloc-self"))]
-        let grand_total_count: u64 = {
+        } else {
             let has_cross_thread_wrapper =
                 self.stats.iter().any(|(_, s)| s.wrapper && s.cross_thread);
 

@@ -43,8 +43,8 @@ impl Drop for MeasurementGuard {
 
                 stack.depth.set(stack.depth.get() - 1);
 
-                #[cfg(not(feature = "hotpath-alloc-self"))]
-                {
+                // If not in exclusive mode, accumulate to parent (cumulative mode)
+                if !super::super::alloc::shared::is_alloc_self_enabled() {
                     let parent = stack.depth.get() as usize;
                     stack.elements[parent]
                         .count_total
