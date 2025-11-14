@@ -693,31 +693,40 @@ pub mod tests {
 
     #[test]
     fn test_multithread_alloc_no_panic() {
-        let feature_sets = [
-            "hotpath,hotpath-alloc-count-total",
-            "hotpath,hotpath-alloc-bytes-total",
-            "hotpath,hotpath-alloc-count-total,hotpath-alloc-self",
-            "hotpath,hotpath-alloc-bytes-total,hotpath-alloc-self",
+        let test_cases = [
+            ("hotpath,hotpath-alloc-count-total", None),
+            ("hotpath,hotpath-alloc-bytes-total", None),
+            ("hotpath,hotpath-alloc-count-total", Some("true")),
+            ("hotpath,hotpath-alloc-bytes-total", Some("true")),
         ];
 
-        for features in feature_sets {
-            let output = Command::new("cargo")
-                .args([
-                    "run",
-                    "-p",
-                    "hotpath-test-tokio-async",
-                    "--example",
-                    "multithread_alloc",
-                    "--features",
-                    features,
-                ])
-                .output()
-                .expect("Failed to execute command");
+        for (features, alloc_self) in test_cases {
+            let mut cmd = Command::new("cargo");
+            cmd.args([
+                "run",
+                "-p",
+                "hotpath-test-tokio-async",
+                "--example",
+                "multithread_alloc",
+                "--features",
+                features,
+            ]);
+
+            if let Some(val) = alloc_self {
+                cmd.env("HOTPATH_ALLOC_SELF", val);
+            }
+
+            let output = cmd.output().expect("Failed to execute command");
+
+            let env_info = alloc_self
+                .map(|v| format!("HOTPATH_ALLOC_SELF={}", v))
+                .unwrap_or_else(|| "no env var".to_string());
 
             assert!(
                 output.status.success(),
-                "Process did not exit successfully with features: {}\n\nstderr:\n{}",
+                "Process did not exit successfully with features: {}, {}\n\nstderr:\n{}",
                 features,
+                env_info,
                 String::from_utf8_lossy(&output.stderr)
             );
         }
