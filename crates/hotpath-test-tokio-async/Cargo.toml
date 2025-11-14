@@ -18,7 +18,6 @@ hotpath = ["hotpath/hotpath"]
 hotpath-alloc-bytes-total = ["hotpath/hotpath-alloc-bytes-total"]
 hotpath-alloc-count-total = ["hotpath/hotpath-alloc-count-total"]
 hotpath-off = ["hotpath/hotpath-off"]
-hotpath-ci = ["hotpath/hotpath-ci"]
 
 [[example]]
 name = "basic"

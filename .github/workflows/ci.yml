@@ -36,11 +36,8 @@ jobs:
         run: | 
           cargo check --all-features
       - name: Check hotpath feature (time mode)
-        run: | 
+        run: |
           cargo check --features hotpath
-      - name: Check hotpath-ci feature 
-        run: | 
-          cargo check --features "hotpath,hotpath-ci"
       - name: Check hotpath-alloc-bytes-total
         run: |
           cargo check --features "hotpath,hotpath-alloc-bytes-total"

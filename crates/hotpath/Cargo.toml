@@ -18,7 +18,6 @@ hotpath = ["hotpath-macros/hotpath", "hotpath-macros/hotpath-off"]
 hotpath-alloc-bytes-total = ["dep:tokio"]
 hotpath-alloc-count-total = ["dep:tokio"]
 hotpath-off = []
-hotpath-ci = []
 tui = ["dep:ratatui", "dep:crossterm"]
 
 [dependencies]

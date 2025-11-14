@@ -627,12 +627,15 @@ impl HotPath {
             }
         }
 
-        // Override reporter with JsonReporter when hotpath-ci feature is enabled
-        #[cfg(feature = "hotpath-ci")]
-        let reporter: Box<dyn Reporter> = Box::new(output::JsonReporter);
-
-        #[cfg(not(feature = "hotpath-ci"))]
-        let reporter = _reporter;
+        // Override reporter with JsonReporter when HOTPATH_JSON env var is enabled
+        let reporter: Box<dyn Reporter> = if std::env::var("HOTPATH_JSON")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false)
+        {
+            Box::new(output::JsonReporter)
+        } else {
+            _reporter
+        };
 
         let wrapper_guard = MeasurementGuard::build(caller_name, true, false);
 
