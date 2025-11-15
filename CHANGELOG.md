@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0] - 2025-11-15
+
+### 🚀 Features
+
+- Add live TUI interface (#50)
+- Display time elapsed for samples
+- Replace hotpath-alloc-self with HOTPATH_ALLOC_SELF
+- Replace hotpath-ci with HOTPATH_JSON
+
+### 🐛 Bug Fixes
+
+- Fix build errors and warnings
+- Display formatted bytes for alloc_bytes_total mode
+
+### ⚙️ Miscellaneous Tasks
+
+- Change default port value
+- Release 0.6.0
+
 ## [0.5.3] - 2025-10-29
 
 ### 🚀 Features
