@@ -3,7 +3,7 @@ mod comment;
 use clap::Parser;
 use comment::upsert_pr_comment;
 use eyre::Result;
-use hotpath::MetricsJson;
+use hotpath::{format_bytes, MetricsJson};
 use prettytable::{Cell, Row, Table};
 use std::env;
 use std::fmt;
@@ -114,7 +114,13 @@ impl MetricDiff {
             MetricDiff::AllocBytes(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
                 let emoji = get_emoji_for_diff(diff_percent, emoji_threshold);
-                format!("{} → {} ({:+.1}%){}", before, after, diff_percent, emoji)
+                format!(
+                    "{} → {} ({:+.1}%){}",
+                    format_bytes(*before),
+                    format_bytes(*after),
+                    diff_percent,
+                    emoji
+                )
             }
             MetricDiff::AllocCount(before, after) => {
                 let diff_percent = calculate_percentage_diff(*before, *after);
