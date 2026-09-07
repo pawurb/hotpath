@@ -2,6 +2,8 @@
 
 The `hotpath-prometheus` feature exposes every profiling subsystem as Prometheus metrics on a dedicated `GET /metrics` endpoint. Point a Prometheus scraper at it and build Grafana dashboards on top of any of the performance signals measured by the library.
 
+<img loading="lazy" src="{{#asset-hash images/grafana-dashboard.png}}" alt="Grafana dashboard built on hotpath-rs Prometheus metrics showing slowest SQL queries, per-function allocations and requests by route">
+
 ## Configure prometheus metrics endpoint
 
 Add `hotpath-prometheus` feature forwarding:
@@ -12,6 +14,7 @@ hotpath = "{{HOTPATH_VERSION}}"
 
 [features]
 hotpath = ["hotpath/hotpath"]
+hotpath-alloc = ["hotpath/hotpath-alloc"]
 hotpath-prometheus = ["hotpath/hotpath-prometheus"]
 ```
 

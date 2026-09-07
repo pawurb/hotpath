@@ -83,6 +83,10 @@ You can use it to produce one-off performance (timing, memory or CPU) reports:
 
 <img loading="lazy" src="{{#asset-hash images/hotpath-alloc-report.png}}" alt="hotpath-rs memory allocation profiling report showing per-function byte counts">
 
+correlate all performance signals in Grafana with minimal profiling overhead:
+
+<img loading="lazy" src="{{#asset-hash images/grafana-dashboard.png}}" alt="Grafana dashboard built on hotpath-rs Prometheus metrics showing slowest SQL queries, per-function allocations and requests by route">
+
 inspect throughput and latency of network, file or compression I/O streams:
 
 <img loading="lazy" src="{{#asset-hash images/io_metrics.png}}" alt="hotpath-rs I/O profiling report showing per-stream read counts, bytes, transfer rate, average and P95 latency">
