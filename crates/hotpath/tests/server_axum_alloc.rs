@@ -133,6 +133,18 @@ pub mod tests {
         assert_eq!(total, 4, "{:?}", server.data);
         let alloc = nested.alloc.as_ref().expect("nested alloc missing");
         assert!(alloc.bytes_per_request.unwrap() >= BIG_BYTES, "{alloc:?}");
+
+        // Still counted once when no route scope exists at all.
+        let report = run_example(&[("NESTED", "1"), ("HOTPATH_ROUTE_SCOPE", "0")]);
+        let server = report.server.expect("No server section in report");
+        assert_eq!(
+            by_route(&server.data, "GET /nested/big").count,
+            3,
+            "{:?}",
+            server.data
+        );
+        let total: u64 = server.data.iter().map(|e| e.count).sum();
+        assert_eq!(total, 4, "{:?}", server.data);
     }
 
     #[test]

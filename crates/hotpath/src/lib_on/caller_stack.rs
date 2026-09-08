@@ -125,6 +125,9 @@ cfg_if::cfg_if! {
         use std::sync::{Once, RwLock};
 
         thread_local! {
+            /// Set while an `AxumLayer` future is being polled on this
+            /// thread, independent of whether the request got a route scope.
+            static IN_LAYER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
             static CURRENT_ROUTE: std::cell::Cell<Option<&'static str>> = const { std::cell::Cell::new(None) };
             /// SQL queries and outbound HTTP requests issued so far by the
             /// request currently in scope; installed by [`enter_route`] and
@@ -176,14 +179,52 @@ cfg_if::cfg_if! {
             Some(leaked)
         }
 
+        /// Marks this thread as polling an `AxumLayer` future for the
+        /// duration of the returned guard. Polls are synchronous, so finding
+        /// the flag already set means the same request is passing through
+        /// `AxumLayer` twice (nested router wrapped separately, or a
+        /// sub-request into a wrapped router): the inner entry returns
+        /// `None`, warns once, and must stay silent so the request is
+        /// reported by the outer layer only. Independent of route scoping,
+        /// which may be disabled or capped.
+        #[inline]
+        pub(crate) fn enter_layer(route: &str) -> Option<LayerGuard> {
+            let entered = IN_LAYER
+                .try_with(|cell| !cell.replace(true))
+                .unwrap_or(true);
+            if !entered {
+                warn_nested_layer(route);
+                return None;
+            }
+            Some(LayerGuard { _private: () })
+        }
+
+        #[cold]
+        fn warn_nested_layer(route: &str) {
+            NESTED_SCOPE_WARNING.call_once(|| {
+                let _suspend = crate::lib_on::SuspendAllocTracking::new();
+                eprintln!(
+                    "hotpath: `{route}` entered AxumLayer twice; apply it once per Router \
+                     (nested routers and sub-requests are reported by the outer layer only)"
+                );
+            });
+        }
+
+        pub(crate) struct LayerGuard {
+            _private: (),
+        }
+
+        impl Drop for LayerGuard {
+            #[inline]
+            fn drop(&mut self) {
+                let _ = IN_LAYER.try_with(|cell| cell.set(false));
+            }
+        }
+
         /// Sets the current route for the duration of the returned guard and
-        /// clears it on drop.
-        ///
-        /// Scopes are exclusive per thread: polls are synchronous, so a route
-        /// already set means the same request is passing through `AxumLayer`
-        /// twice (nested router wrapped separately, or a sub-request into a
-        /// wrapped router). The inner entry returns `None` and warns once; the
-        /// outer scope keeps the request's counters.
+        /// clears it on drop. Only entered under [`enter_layer`], so a route
+        /// already set cannot happen; it is still answered with `None` rather
+        /// than clobbering the outer scope's counters.
         ///
         /// `calls` and `alloc` hold the request's running SQL / HTTP counts and
         /// allocation totals: installed for the scope and written back when
@@ -195,16 +236,15 @@ cfg_if::cfg_if! {
             alloc: &'a mut RequestAlloc,
         ) -> Option<RouteScopeGuard<'a>> {
             let entered = CURRENT_ROUTE
-                .try_with(|cell| match cell.get() {
-                    Some(existing) => Err(existing),
-                    None => {
-                        cell.set(Some(route));
-                        Ok(())
+                .try_with(|cell| {
+                    if cell.get().is_some() {
+                        return false;
                     }
+                    cell.set(Some(route));
+                    true
                 })
-                .unwrap_or(Ok(()));
-            if let Err(existing) = entered {
-                warn_nested_scope(existing, route);
+                .unwrap_or(true);
+            if !entered {
                 return None;
             }
             let _ = REQUEST_CALLS.try_with(|cell| cell.set(*calls));
@@ -218,17 +258,6 @@ cfg_if::cfg_if! {
             })
         }
 
-        #[cold]
-        fn warn_nested_scope(existing: &'static str, route: &'static str) {
-            NESTED_SCOPE_WARNING.call_once(|| {
-                let _suspend = crate::lib_on::SuspendAllocTracking::new();
-                eprintln!(
-                    "hotpath: route scope for `{existing}` is still active while entering \
-                     `{route}`; apply `AxumLayer` once per Router (nested routers and \
-                     sub-requests are reported by the outer layer only)"
-                );
-            });
-        }
 
         #[inline]
         #[allow(dead_code)]
@@ -308,9 +337,17 @@ cfg_if::cfg_if! {
 #[cfg(all(test, feature = "axum-0-8"))]
 mod tests {
     use crate::lib_on::caller_stack::{
-        current_http_route, current_route, current_sql_route, enter_route, intern_route,
-        RequestAlloc, RequestCalls,
+        current_http_route, current_route, current_sql_route, enter_layer, enter_route,
+        intern_route, RequestAlloc, RequestCalls,
     };
+
+    #[test]
+    fn layer_entry_is_exclusive_per_thread() {
+        let outer = enter_layer("GET /outer").expect("first layer enters");
+        assert!(enter_layer("GET /outer").is_none());
+        drop(outer);
+        assert!(enter_layer("GET /next").is_some());
+    }
 
     #[test]
     fn route_scope_counts_calls_and_is_exclusive() {
