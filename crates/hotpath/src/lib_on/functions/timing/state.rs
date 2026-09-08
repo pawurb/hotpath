@@ -41,6 +41,7 @@ pub(crate) struct Measurement {
     pub(crate) tid: Option<u64>,
     pub(crate) result_log: Option<String>,
     /// Axum route scope active when the guard dropped, if any.
+    #[cfg(feature = "hotpath-prometheus")]
     pub(crate) route: Option<&'static str>,
 }
 
@@ -60,6 +61,7 @@ pub(crate) struct FunctionStats {
     pub(crate) wrapper: bool,
     pub(crate) recent_logs: VecDeque<TimingLogEntry>,
     /// Calls split by the axum route they ran under (Prometheus only).
+    #[cfg(feature = "hotpath-prometheus")]
     pub(crate) routes: crate::lib_on::functions::RouteStatsMap,
 }
 
@@ -82,6 +84,7 @@ impl FunctionStats {
             has_data: false,
             wrapper,
             recent_logs: VecDeque::with_capacity(*crate::channels::LOGS_LIMIT),
+            #[cfg(feature = "hotpath-prometheus")]
             routes: HashMap::new(),
         }
     }
@@ -203,6 +206,7 @@ pub(crate) fn process_measurement(
     };
     if let Some(s) = stats.get_mut(&id) {
         s.update(m.duration_ns, elapsed, m.tid, m.result_log);
+        #[cfg(feature = "hotpath-prometheus")]
         if let Some(route) = m.route {
             s.routes
                 .entry(route)
@@ -250,6 +254,7 @@ pub(crate) fn send_duration_measurement_with_log(
         wrapper,
         tid,
         result_log,
+        #[cfg(feature = "hotpath-prometheus")]
         route: crate::lib_on::caller_stack::current_route(),
     });
 }

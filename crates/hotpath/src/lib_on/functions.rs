@@ -418,6 +418,7 @@ pub(crate) fn get_cpu_label_aliases() -> HashMap<&'static str, &'static str> {
 /// route scope), running totals only - what the Prometheus
 /// `hotpath_function_route_*` families export. The report stays per function.
 #[derive(Debug, Default, Clone)]
+#[cfg(feature = "hotpath-prometheus")]
 pub(crate) struct RouteFunctionStats {
     pub(crate) count: u64,
     /// Calls that carried a duration (not skipped by time sampling).
@@ -427,8 +428,10 @@ pub(crate) struct RouteFunctionStats {
     pub(crate) total_allocs: u64,
 }
 
+#[cfg(feature = "hotpath-prometheus")]
 pub(crate) type RouteStatsMap = HashMap<&'static str, RouteFunctionStats>;
 
+#[cfg(feature = "hotpath-prometheus")]
 impl RouteFunctionStats {
     #[inline]
     pub(crate) fn record(

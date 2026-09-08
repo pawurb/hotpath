@@ -43,6 +43,7 @@ pub(crate) struct Measurement {
     pub(crate) tid: Option<u64>,
     pub(crate) result_log: Option<String>,
     /// Axum route scope active when the guard dropped, if any.
+    #[cfg(feature = "hotpath-prometheus")]
     pub(crate) route: Option<&'static str>,
 }
 
@@ -72,6 +73,7 @@ pub(crate) struct FunctionStats {
     pub(crate) wrapper: bool,
     pub(crate) recent_logs: VecDeque<LogEntry>,
     /// Calls split by the axum route they ran under (Prometheus only).
+    #[cfg(feature = "hotpath-prometheus")]
     pub(crate) routes: crate::lib_on::functions::RouteStatsMap,
 }
 
@@ -136,6 +138,7 @@ impl FunctionStats {
             is_async: bytes_total.is_none(),
             wrapper,
             recent_logs,
+            #[cfg(feature = "hotpath-prometheus")]
             routes: HashMap::new(),
         };
         s.record_alloc(bytes_total, count_total);
@@ -340,6 +343,7 @@ impl FunctionStats {
         }
     }
 
+    #[cfg(feature = "hotpath-prometheus")]
     #[inline]
     fn record_route(
         &mut self,
@@ -412,6 +416,7 @@ pub(crate) fn process_measurement(
     let elapsed = Duration::from_nanos(m.elapsed_since_start_ns);
     if let Some(&id) = name_to_id.get(m.name) {
         if let Some(s) = stats.get_mut(&id) {
+            #[cfg(feature = "hotpath-prometheus")]
             s.record_route(m.route, m.duration_ns, m.bytes_total, m.count_total);
             s.update_alloc(
                 m.bytes_total,
@@ -425,6 +430,7 @@ pub(crate) fn process_measurement(
     } else {
         let id = crate::functions::next_function_id();
         name_to_id.insert(m.name, id);
+        #[cfg_attr(not(feature = "hotpath-prometheus"), allow(unused_mut))]
         let mut s = FunctionStats::new_alloc(
             id,
             m.name,
@@ -436,6 +442,7 @@ pub(crate) fn process_measurement(
             m.tid,
             m.result_log,
         );
+        #[cfg(feature = "hotpath-prometheus")]
         s.record_route(m.route, m.duration_ns, m.bytes_total, m.count_total);
         stats.insert(id, s);
     }
@@ -489,6 +496,7 @@ pub(crate) fn send_alloc_measurement_with_log(
         wrapper,
         tid,
         result_log,
+        #[cfg(feature = "hotpath-prometheus")]
         route: crate::lib_on::caller_stack::current_route(),
     });
 }

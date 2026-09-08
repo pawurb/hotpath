@@ -316,6 +316,7 @@ cfg_if::cfg_if! {
         }
     } else {
         #[inline]
+        #[allow(dead_code)]
         pub(crate) fn current_route() -> Option<&'static str> {
             None
         }
