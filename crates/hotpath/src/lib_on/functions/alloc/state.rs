@@ -42,6 +42,8 @@ pub(crate) struct Measurement {
     pub(crate) wrapper: bool,
     pub(crate) tid: Option<u64>,
     pub(crate) result_log: Option<String>,
+    /// Axum route scope active when the guard dropped, if any.
+    pub(crate) route: Option<&'static str>,
 }
 
 type LogEntry = (
@@ -69,6 +71,8 @@ pub(crate) struct FunctionStats {
     pub(crate) is_async: bool,
     pub(crate) wrapper: bool,
     pub(crate) recent_logs: VecDeque<LogEntry>,
+    /// Calls split by the axum route they ran under (Prometheus only).
+    pub(crate) routes: crate::lib_on::functions::RouteStatsMap,
 }
 
 impl FunctionStats {
@@ -132,6 +136,7 @@ impl FunctionStats {
             is_async: bytes_total.is_none(),
             wrapper,
             recent_logs,
+            routes: HashMap::new(),
         };
         s.record_alloc(bytes_total, count_total);
         s.record_duration(duration_ns);
@@ -331,6 +336,23 @@ impl FunctionStats {
             allocs_classic: classic_buckets_opt(count_hist, true, allocs_boundaries),
             bytes_zero_count: bytes_hist.map_or(0, |h| h.count_at(0)),
             allocs_zero_count: count_hist.map_or(0, |h| h.count_at(0)),
+            routes: crate::lib_on::functions::raw_routes(&self.routes),
+        }
+    }
+
+    #[inline]
+    fn record_route(
+        &mut self,
+        route: Option<&'static str>,
+        duration_ns: Option<u64>,
+        bytes_total: Option<u64>,
+        count_total: Option<u64>,
+    ) {
+        if let Some(route) = route {
+            self.routes
+                .entry(route)
+                .or_default()
+                .record(duration_ns, bytes_total, count_total);
         }
     }
 
@@ -390,6 +412,7 @@ pub(crate) fn process_measurement(
     let elapsed = Duration::from_nanos(m.elapsed_since_start_ns);
     if let Some(&id) = name_to_id.get(m.name) {
         if let Some(s) = stats.get_mut(&id) {
+            s.record_route(m.route, m.duration_ns, m.bytes_total, m.count_total);
             s.update_alloc(
                 m.bytes_total,
                 m.count_total,
@@ -402,20 +425,19 @@ pub(crate) fn process_measurement(
     } else {
         let id = crate::functions::next_function_id();
         name_to_id.insert(m.name, id);
-        stats.insert(
+        let mut s = FunctionStats::new_alloc(
             id,
-            FunctionStats::new_alloc(
-                id,
-                m.name,
-                m.bytes_total,
-                m.count_total,
-                m.duration_ns,
-                elapsed,
-                m.wrapper,
-                m.tid,
-                m.result_log,
-            ),
+            m.name,
+            m.bytes_total,
+            m.count_total,
+            m.duration_ns,
+            elapsed,
+            m.wrapper,
+            m.tid,
+            m.result_log,
         );
+        s.record_route(m.route, m.duration_ns, m.bytes_total, m.count_total);
+        stats.insert(id, s);
     }
 }
 
@@ -467,6 +489,7 @@ pub(crate) fn send_alloc_measurement_with_log(
         wrapper,
         tid,
         result_log,
+        route: crate::lib_on::caller_stack::current_route(),
     });
 }
 

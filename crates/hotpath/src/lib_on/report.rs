@@ -16,7 +16,8 @@ use crate::json::JsonDebugEntry;
 use crate::json::{
     JsonChannelsList, JsonFutureEntry, JsonFuturesList, JsonHttpEntry, JsonHttpList, JsonIoEntry,
     JsonIoList, JsonIoOpStats, JsonMutexEntry, JsonMutexesList, JsonRwLockEntry, JsonRwLocksList,
-    JsonServerEntry, JsonServerList, JsonSqlEntry, JsonSqlList, JsonStreamEntry, JsonStreamsList,
+    JsonServerAlloc, JsonServerEntry, JsonServerList, JsonSqlEntry, JsonSqlList, JsonStreamEntry,
+    JsonStreamsList,
 };
 use crate::mutexes::{compare_mutex_entries, MutexEntry, MUTEXES_STATE};
 use crate::output::{
@@ -928,6 +929,9 @@ pub(crate) fn shutdown_server() -> Vec<ServerEntry> {
 pub(crate) struct ServerColumns {
     pub(crate) sql: bool,
     pub(crate) http: bool,
+    /// Per-route memory (the second `server` sub-table and the JSON `alloc`
+    /// object): only meaningful when the counting allocator is compiled in.
+    pub(crate) alloc: bool,
 }
 
 impl ServerColumns {
@@ -935,6 +939,7 @@ impl ServerColumns {
         Self {
             sql: SQL_STATE.get().is_some(),
             http: HTTP_STATE.get().is_some(),
+            alloc: cfg!(feature = "hotpath-alloc"),
         }
     }
 }
@@ -943,11 +948,13 @@ fn format_per_request(value: Option<f64>) -> String {
     value.map_or_else(|| "-".to_string(), |v| format!("{v:.1}"))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn report_server_table(
     entries: &[ServerEntry],
     total_count: usize,
     total_calls: u64,
     reference_total: u64,
+    reference_alloc_bytes: u64,
     percentiles: &[f64],
     columns: ServerColumns,
     writer: &mut dyn Write,
@@ -1016,11 +1023,98 @@ pub(crate) fn report_server_table(
 
     print_table(&table, writer);
     let _ = writeln!(writer);
+
+    if columns.alloc {
+        report_server_alloc_subtable(entries, reference_alloc_bytes, percentiles, writer);
+    }
+}
+
+/// Memory per route, stacked under the timing table in the same row order.
+/// Rows without a route scope print `-` for every per-request value.
+fn report_server_alloc_subtable(
+    entries: &[ServerEntry],
+    reference_total: u64,
+    percentiles: &[f64],
+    writer: &mut dyn Write,
+) {
+    let scoped = |entry: &ServerEntry, value: String| -> String {
+        if entry.scoped_count > 0 {
+            value
+        } else {
+            "-".to_string()
+        }
+    };
+
+    let mut header = vec![
+        Cell::header("Route"),
+        Cell::header("Calls"),
+        Cell::header("Allocs/req"),
+        Cell::header("Avg"),
+    ];
+    for &p in percentiles {
+        header.push(Cell::header(&format_percentile_header(p)));
+    }
+    header.push(Cell::header("Total"));
+    header.push(Cell::header("% Total"));
+
+    let mut table = Table::new();
+    table.add_row(header);
+
+    for entry in entries {
+        let mut row = vec![
+            Cell::new(&truncate_query(&entry.route)),
+            Cell::new(&entry.count.to_string()),
+            Cell::new(&format_per_request(entry.allocs_per_request())),
+            Cell::new(&scoped(entry, format_bytes(entry.avg_bytes()))),
+        ];
+        for &p in percentiles {
+            row.push(Cell::new(&scoped(
+                entry,
+                format_bytes(entry.percentile_bytes(p)),
+            )));
+        }
+        row.push(Cell::new(&scoped(entry, format_bytes(entry.alloc_bytes))));
+        row.push(Cell::new(&scoped(
+            entry,
+            format_sql_percent(entry.alloc_bytes, reference_total),
+        )));
+        table.add_row(row);
+    }
+
+    print_table(&table, writer);
+    let _ = writeln!(writer);
+}
+
+fn server_alloc_to_json(
+    entry: &ServerEntry,
+    reference_total: u64,
+    percentiles: &[f64],
+    histograms: bool,
+) -> JsonServerAlloc {
+    let mut percentile_map = HashMap::new();
+    for &p in percentiles {
+        percentile_map.insert(
+            format_percentile_key(p),
+            format_bytes(entry.percentile_bytes(p)),
+        );
+    }
+
+    JsonServerAlloc {
+        bytes_per_request: entry.bytes_per_request(),
+        allocs_per_request: entry.allocs_per_request(),
+        total_bytes: entry.alloc_bytes,
+        avg: format_bytes(entry.avg_bytes()),
+        total: format_bytes(entry.alloc_bytes),
+        percent_total: format_sql_percent(entry.alloc_bytes, reference_total),
+        percentiles: percentile_map,
+        histogram: histograms.then(|| entry.alloc_histogram_base64()).flatten(),
+    }
 }
 
 fn server_to_json(
     entry: &ServerEntry,
     reference_total: u64,
+    reference_alloc_bytes: u64,
     percentiles: &[f64],
     columns: ServerColumns,
     histograms: bool,
@@ -1046,6 +1140,9 @@ fn server_to_json(
         percent_total: format_sql_percent(entry.total_nanos, reference_total),
         percentiles: percentile_map,
         histogram: histograms.then(|| entry.histogram_base64()).flatten(),
+        alloc: columns
+            .alloc
+            .then(|| server_alloc_to_json(entry, reference_alloc_bytes, percentiles, histograms)),
     }
 }
 
@@ -1058,6 +1155,7 @@ pub(crate) fn collect_server_json(
     histograms: bool,
 ) -> JsonServerList {
     let reference_total: u64 = entries.iter().map(|e| e.total_nanos).sum();
+    let total_alloc_bytes: u64 = entries.iter().map(|e| e.alloc_bytes).sum();
     let total_calls: u64 = entries.iter().map(|e| e.count).sum();
     let total_count = entries.len();
     let entries = &entries[..apply_limit(total_count, limit)];
@@ -1067,10 +1165,20 @@ pub(crate) fn collect_server_json(
         current_elapsed_ns: elapsed.as_nanos() as u64,
         total_ns: reference_total,
         total_calls,
+        total_alloc_bytes,
         percentiles: percentiles.to_vec(),
         data: entries
             .iter()
-            .map(|entry| server_to_json(entry, reference_total, percentiles, columns, histograms))
+            .map(|entry| {
+                server_to_json(
+                    entry,
+                    reference_total,
+                    total_alloc_bytes,
+                    percentiles,
+                    columns,
+                    histograms,
+                )
+            })
             .collect(),
     }
 }

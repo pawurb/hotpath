@@ -604,6 +604,11 @@ pub struct JsonServerList {
     /// Total number of served requests across all entries, including ones
     /// truncated from `data` by the display limit.
     pub total_calls: u64,
+    /// Bytes allocated by scoped requests across all entries, including ones
+    /// truncated from `data`; the denominator of `alloc.percent_total`. Zero
+    /// unless built with `hotpath-alloc`.
+    #[serde(default)]
+    pub total_alloc_bytes: u64,
     pub percentiles: Vec<f64>,
     pub data: Vec<JsonServerEntry>,
     /// Number of entries measured, including ones truncated from `data` by
@@ -635,6 +640,35 @@ pub struct JsonServerEntry {
     pub total: String,
     pub percent_total: String,
     pub percentiles: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub histogram: Option<String>,
+    /// Memory allocated by requests of this route, present only when the
+    /// program was built with `hotpath-alloc`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alloc: Option<JsonServerAlloc>,
+}
+
+/// Allocation statistics of one route: bytes and allocation counts made
+/// under the route scope of each completed request (extractors, handler,
+/// serialization - everything polled inside the `AxumLayer` future), so the
+/// same scope rules as `sql_per_request` apply. `avg` / `total` /
+/// `percentiles` are formatted byte counts; `total_bytes` is raw.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonServerAlloc {
+    /// Average bytes allocated per scoped request; `None` when no completed
+    /// request of the route carried a route scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_per_request: Option<f64>,
+    /// Average allocations per scoped request; same semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allocs_per_request: Option<f64>,
+    pub total_bytes: u64,
+    pub avg: String,
+    pub total: String,
+    /// Share of `JsonServerList::total_alloc_bytes`.
+    pub percent_total: String,
+    pub percentiles: HashMap<String, String>,
+    /// Bytes-per-request histogram (base64 HdrHistogram), cloud path only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub histogram: Option<String>,
 }

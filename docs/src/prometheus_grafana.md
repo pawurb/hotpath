@@ -160,6 +160,22 @@ With the `hotpath-alloc` feature:
 
 The two per-call histograms are omitted for async entries whose measurements carry no per-call totals.
 
+With the [axum layer](axum_tracing.md) installed, calls made under a route scope are additionally split by route (running totals only, no per-route histograms), which answers "which functions does this endpoint spend its time and memory in":
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `hotpath_function_route_calls_total` | counter | `function`, `route` | Calls made under each route |
+| `hotpath_function_route_timed_calls_total` | counter | `function`, `route` | Route-scoped calls that carried a duration (time sampling) |
+| `hotpath_function_route_duration_seconds_total` | counter | `function`, `route` | Time spent in the function under each route, over timed calls |
+| `hotpath_function_route_alloc_bytes_total` | counter | `function`, `route` | Bytes allocated by the function under each route (`hotpath-alloc`) |
+| `hotpath_function_route_alloc_count_total` | counter | `function`, `route` | Allocations made by the function under each route (`hotpath-alloc`) |
+
+Calls outside any route scope are only in the per-function families above. Divide by `hotpath_function_route_timed_calls_total` (time) or `hotpath_function_route_calls_total` (memory) for per-call averages, e.g. the functions a route allocates the most in:
+
+```promql
+topk(10, sum by (function) (increase(hotpath_function_route_alloc_bytes_total{route="GET /users/{id}"}[1h])))
+```
+
 ### SQL queries
 
 Requires a [SQL tracing](sql_tracing.md) integration. Series are keyed by normalized query text; queries longer than `HOTPATH_MAX_LOG_LEN` are truncated with a hash suffix so distinct queries never collapse into one series.
@@ -193,8 +209,11 @@ Requires [`hotpath::axum!(router)`](axum_tracing.md).
 | `hotpath_server_scoped_requests_total` | counter | `route` | Completed requests that carried a route scope |
 | `hotpath_server_sql_calls_total` | counter | `route` | SQL queries issued by route-scoped requests |
 | `hotpath_server_http_calls_total` | counter | `route` | Outbound HTTP requests issued by route-scoped requests |
+| `hotpath_server_alloc_bytes_total` | counter | `route` | Bytes allocated by route-scoped requests (`hotpath-alloc`) |
+| `hotpath_server_alloc_count_total` | counter | `route` | Allocations made by route-scoped requests (`hotpath-alloc`) |
+| `hotpath_server_alloc_bytes` | histogram | `route` | Bytes allocated per route-scoped request (`hotpath-alloc`) |
 
-Divide the SQL and HTTP call counters by `hotpath_server_scoped_requests_total` for per-request rates.
+Divide the SQL, HTTP and allocation counters by `hotpath_server_scoped_requests_total` for per-request rates; `hotpath_server_alloc_bytes` gives per-request memory percentiles with `histogram_quantile`.
 
 ### Locks
 

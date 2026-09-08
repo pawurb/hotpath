@@ -297,6 +297,9 @@ jobs:
       - name: Run server axum route scope tests
         run: |
           cargo test --features hotpath --test server_axum_route_scope -- --nocapture --test-threads=1
+      - name: Run server axum alloc tests
+        run: |
+          cargo test --features hotpath --test server_axum_alloc -- --nocapture --test-threads=1
       - name: Run sql sqlite tests
         # sqlx 0.9 (test-sqlx-09) has MSRV 1.94
         if: matrix.rust != '1.89'

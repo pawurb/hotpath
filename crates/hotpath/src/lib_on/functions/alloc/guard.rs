@@ -78,6 +78,9 @@ pub(crate) fn pop_alloc_stack() -> (u64, u64) {
             stack.elements[parent]
                 .count_total
                 .set(stack.elements[parent].count_total.get() + count);
+        } else {
+            // In cumulative mode the bytes reach the route through its frame.
+            crate::functions::alloc::core::route_alloc_add(stack, bytes, count);
         }
 
         (bytes, count)
