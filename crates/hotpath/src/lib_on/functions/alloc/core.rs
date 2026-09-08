@@ -310,6 +310,11 @@ pub(crate) fn route_alloc_enter(carry: RequestAlloc) -> u32 {
 /// so that frame is folded in by hand: in exclusive mode it holds the
 /// residual (children already landed on their own pops), under
 /// `HOTPATH_ALLOC_CUMULATIVE` it holds the inclusive total.
+///
+/// The route frame is not a function, so its residual also flows into the
+/// enclosing frame: a measured function wrapping the axum layer keeps seeing
+/// those bytes as its own, exactly as it did before route scoping existed
+/// (cumulative mode already propagates on pop).
 #[cfg(feature = "axum-0-8")]
 #[inline]
 pub(crate) fn route_alloc_exit(entry_depth: u32) -> RequestAlloc {
@@ -320,11 +325,18 @@ pub(crate) fn route_alloc_exit(entry_depth: u32) -> RequestAlloc {
     let (bytes, count) = crate::functions::alloc::guard::pop_alloc_stack();
     total.bytes += bytes;
     total.count += count;
-    debug_assert_eq!(
-        ALLOCATIONS.with(|stack| stack.depth.get()),
-        entry_depth,
-        "alloc stack unbalanced across a route scope"
-    );
+    ALLOCATIONS.with(|stack| {
+        debug_assert_eq!(
+            stack.depth.get(),
+            entry_depth,
+            "alloc stack unbalanced across a route scope"
+        );
+        if !*crate::functions::alloc::guard::ALLOC_CUMULATIVE {
+            let parent = &stack.elements[stack.depth.get() as usize];
+            parent.bytes_total.set(parent.bytes_total.get() + bytes);
+            parent.count_total.set(parent.count_total.get() + count);
+        }
+    });
     total
 }
 

@@ -428,5 +428,26 @@ mod tests {
                 count: 3
             }
         );
+
+        // A measured function enclosing the scope (middleware outside the
+        // layer) still sees the route frame's residual as its own bytes; a
+        // measured child inside the scope stays exclusive.
+        let mut enclosed = RequestAlloc::ZERO;
+        push_alloc_stack();
+        {
+            let _scope = enter_route(route, &mut calls, &mut enclosed).unwrap();
+            track_alloc(512);
+            push_alloc_stack();
+            track_alloc(64);
+            pop_alloc_stack();
+        }
+        assert_eq!(pop_alloc_stack(), (512, 1));
+        assert_eq!(
+            enclosed,
+            RequestAlloc {
+                bytes: 576,
+                count: 2
+            }
+        );
     }
 }

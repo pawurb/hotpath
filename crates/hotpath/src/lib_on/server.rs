@@ -119,7 +119,8 @@ pub(crate) struct ServerEntry {
     hist: Option<Histogram<u64>>,
     /// Bytes allocated per scoped request; same bounds as the function alloc
     /// histograms so the exported buckets line up with
-    /// `hotpath_function_alloc_bytes`.
+    /// `hotpath_function_alloc_bytes`. `None` without `hotpath-alloc`, where
+    /// every request would record a zero into ~170 KB of buckets per route.
     bytes_hist: Option<Histogram<u64>>,
 }
 
@@ -149,12 +150,16 @@ impl ServerEntry {
             alloc_count: 0,
             hist: Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
                 .ok(),
-            bytes_hist: Histogram::<u64>::new_with_bounds(
-                Self::LOW_BYTES,
-                Self::HIGH_BYTES,
-                Self::SIGFIGS,
-            )
-            .ok(),
+            bytes_hist: cfg!(feature = "hotpath-alloc")
+                .then(|| {
+                    Histogram::<u64>::new_with_bounds(
+                        Self::LOW_BYTES,
+                        Self::HIGH_BYTES,
+                        Self::SIGFIGS,
+                    )
+                    .ok()
+                })
+                .flatten(),
         }
     }
 
@@ -603,8 +608,11 @@ mod tests {
         assert_eq!(entry.bytes_per_request(), Some(2_000.0));
         assert_eq!(entry.allocs_per_request(), Some(20.0));
         assert_eq!(entry.avg_bytes(), 2_000);
-        // hdrhistogram reports the highest equivalent value of its 0.1% bin.
-        assert!((3_000..=3_003).contains(&entry.percentile_bytes(100.0)));
+        // hdrhistogram reports the highest equivalent value of its 0.1% bin;
+        // without the counting allocator there is no histogram at all.
+        if cfg!(feature = "hotpath-alloc") {
+            assert!((3_000..=3_003).contains(&entry.percentile_bytes(100.0)));
+        }
 
         process_server_event(&mut state, completed("GET /missing", None));
         let unscoped = &state.stats["GET /missing"];
@@ -615,6 +623,7 @@ mod tests {
         assert_eq!(unscoped.percentile_bytes(50.0), 0);
     }
 
+    #[cfg(feature = "hotpath-alloc")]
     #[test]
     fn zero_byte_requests_count_toward_alloc_percentiles() {
         let mut state = ServerInternalState::default();
