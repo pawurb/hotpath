@@ -710,6 +710,7 @@ mod histogram_tests {
         assert!(entry.alloc_histogram_base64().is_none());
     }
 
+    #[cfg(feature = "hotpath-alloc")]
     #[test]
     fn alloc_histogram_encodes_scoped_requests() {
         use crate::lib_on::caller_stack::RequestAlloc;
