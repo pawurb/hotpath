@@ -47,18 +47,14 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Runs the pull request's code, so it holds nothing worth stealing.
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          # The merge ref's sha appears nowhere in the relay's `workflow_run`
-          # payload; `head_sha` does.
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # With `hotpath-cloud-meta` the JSON report is the upload payload.
       - name: Run meta benchmark and write report
         env:
           HOTPATH_META_BENCHMARK: meta
