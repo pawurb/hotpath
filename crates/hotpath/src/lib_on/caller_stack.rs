@@ -249,13 +249,8 @@ cfg_if::cfg_if! {
             }
             let _ = REQUEST_CALLS.try_with(|cell| cell.set(*calls));
             #[cfg(feature = "hotpath-alloc")]
-            let entry_depth = crate::functions::alloc::core::route_alloc_enter(*alloc);
-            Some(RouteScopeGuard {
-                calls,
-                alloc,
-                #[cfg(feature = "hotpath-alloc")]
-                entry_depth,
-            })
+            crate::functions::alloc::core::route_alloc_enter(*alloc);
+            Some(RouteScopeGuard { calls, alloc })
         }
 
 
@@ -297,8 +292,6 @@ cfg_if::cfg_if! {
             calls: &'a mut RequestCalls,
             #[cfg_attr(not(feature = "hotpath-alloc"), allow(dead_code))]
             alloc: &'a mut RequestAlloc,
-            #[cfg(feature = "hotpath-alloc")]
-            entry_depth: u32,
         }
 
         impl Drop for RouteScopeGuard<'_> {
@@ -306,7 +299,7 @@ cfg_if::cfg_if! {
             fn drop(&mut self) {
                 #[cfg(feature = "hotpath-alloc")]
                 {
-                    *self.alloc = crate::functions::alloc::core::route_alloc_exit(self.entry_depth);
+                    *self.alloc = crate::functions::alloc::core::route_alloc_exit();
                 }
                 let _ = CURRENT_ROUTE.try_with(|cell| cell.set(None));
                 let _ = REQUEST_CALLS.try_with(|cell| {
@@ -409,10 +402,10 @@ mod tests {
         let mut alloc = RequestAlloc::ZERO;
         {
             let _scope = enter_route(route, &mut calls, &mut alloc).unwrap();
-            // Allocated directly under the route frame.
+            // Allocated outside any measured function.
             track_alloc(4096);
-            // Allocated inside a measured function: its exclusive frame is
-            // folded into the request when it pops.
+            // Allocated inside a measured function: the scope counts it too,
+            // the function's own frame stays exclusive.
             push_alloc_stack();
             track_alloc(2048);
             assert_eq!(pop_alloc_stack(), (2048, 1));
@@ -438,8 +431,8 @@ mod tests {
             }
         );
 
-        // Allocations outside any scope stay out, and a measured frame popped
-        // outside a scope is not attributed to the last request.
+        // Allocations outside any scope stay out, including ones made inside
+        // a measured function.
         track_alloc(8192);
         push_alloc_stack();
         track_alloc(16);
@@ -467,9 +460,10 @@ mod tests {
             }
         );
 
-        // A measured function enclosing the scope (middleware outside the
-        // layer) still sees the route frame's residual as its own bytes; a
-        // measured child inside the scope stays exclusive.
+        // The scope pushes no frame of its own, so a measured function
+        // enclosing it (middleware outside the layer) keeps seeing the bytes
+        // allocated under the scope as its own; a measured child inside the
+        // scope stays exclusive.
         let mut enclosed = RequestAlloc::ZERO;
         push_alloc_stack();
         {
@@ -485,6 +479,56 @@ mod tests {
             RequestAlloc {
                 bytes: 576,
                 count: 2
+            }
+        );
+
+        // A guard whose lifetime straddles the poll boundary (`measure_block!`
+        // around an `.await`) leaves its frame open when the scope closes. The
+        // scope counts what was allocated while it was open and leaves the
+        // frame alone, so the guard still pops its own bytes afterwards.
+        let mut straddling = RequestAlloc::ZERO;
+        {
+            let _scope = enter_route(route, &mut calls, &mut straddling).unwrap();
+            push_alloc_stack();
+            track_alloc(128);
+        }
+        track_alloc(32);
+        assert_eq!(
+            straddling,
+            RequestAlloc {
+                bytes: 128,
+                count: 1
+            }
+        );
+        assert_eq!(pop_alloc_stack(), (160, 2));
+
+        // The same guard's frame opened during one poll and popped during the
+        // next: each scope counts what was allocated while it was open, the
+        // pop adds nothing on top, and the guard still sees its own total.
+        let mut across = RequestAlloc::ZERO;
+        {
+            let _scope = enter_route(route, &mut calls, &mut across).unwrap();
+            push_alloc_stack();
+            track_alloc(100);
+        }
+        assert_eq!(
+            across,
+            RequestAlloc {
+                bytes: 100,
+                count: 1
+            }
+        );
+        {
+            let _scope = enter_route(route, &mut calls, &mut across).unwrap();
+            track_alloc(200);
+            assert_eq!(pop_alloc_stack(), (300, 2));
+            track_alloc(400);
+        }
+        assert_eq!(
+            across,
+            RequestAlloc {
+                bytes: 700,
+                count: 3
             }
         );
     }

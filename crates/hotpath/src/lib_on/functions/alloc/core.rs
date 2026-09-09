@@ -284,63 +284,34 @@ thread_local! {
 }
 
 /// Opens the route scope's allocation window: installs the request's totals
-/// carried over from previous polls and pushes a frame for allocations made
-/// outside any measured function. Exclusive frames partition the thread's
-/// allocations, so every frame popped while the window is open plus this
-/// frame's residual is the exact inclusive total. Returns the depth before
-/// the push, which [`route_alloc_exit`] expects back.
+/// carried over from previous polls, so every allocation tracked on this
+/// thread until [`route_alloc_exit`] counts towards the request.
+///
+/// The window is a plain counter rather than a frame on the allocation stack:
+/// the route wants the inclusive total, so it needs no bucket of its own, and
+/// staying off the stack keeps it independent of guards whose lifetime
+/// straddles a poll boundary (`measure_block!` around an `.await`).
 #[cfg(feature = "axum-0-8")]
 #[inline]
-pub(crate) fn route_alloc_enter(carry: RequestAlloc) -> u32 {
-    let entry_depth = ALLOCATIONS.with(|stack| {
-        debug_assert!(
-            !stack.route_active.get(),
-            "route alloc window opened while another is active"
-        );
+pub(crate) fn route_alloc_enter(carry: RequestAlloc) {
+    ALLOCATIONS.with(|stack| {
         stack.route.set(carry);
         stack.route_active.set(true);
-        stack.depth.get()
     });
-    crate::functions::alloc::guard::push_alloc_stack();
-    entry_depth
 }
 
-/// Closes the window opened by [`route_alloc_enter`] and returns the
-/// request's totals so far. The window is closed before the route frame pops
-/// so that frame is folded in by hand: in exclusive mode it holds the
-/// residual (children already landed on their own pops), under
-/// `HOTPATH_ALLOC_CUMULATIVE` it holds the inclusive total.
-///
-/// The route frame is not a function, so its residual also flows into the
-/// enclosing frame: a measured function wrapping the axum layer keeps seeing
-/// those bytes as its own, exactly as it did before route scoping existed
-/// (cumulative mode already propagates on pop).
+/// Closes the window opened by [`route_alloc_enter`] and returns the request's
+/// totals so far.
 #[cfg(feature = "axum-0-8")]
 #[inline]
-pub(crate) fn route_alloc_exit(entry_depth: u32) -> RequestAlloc {
-    let mut total = ALLOCATIONS.with(|stack| {
+pub(crate) fn route_alloc_exit() -> RequestAlloc {
+    ALLOCATIONS.with(|stack| {
         stack.route_active.set(false);
         stack.route.replace(RequestAlloc::ZERO)
-    });
-    let (bytes, count) = crate::functions::alloc::guard::pop_alloc_stack();
-    total.bytes += bytes;
-    total.count += count;
-    ALLOCATIONS.with(|stack| {
-        debug_assert_eq!(
-            stack.depth.get(),
-            entry_depth,
-            "alloc stack unbalanced across a route scope"
-        );
-        if !*crate::functions::alloc::guard::ALLOC_CUMULATIVE {
-            let parent = &stack.elements[stack.depth.get() as usize];
-            parent.bytes_total.set(parent.bytes_total.get() + bytes);
-            parent.count_total.set(parent.count_total.get() + count);
-        }
-    });
-    total
+    })
 }
 
-/// Folds a popped exclusive frame into the active route window, if any.
+/// Counts a tracked allocation towards the active route window, if any.
 #[cfg(feature = "axum-0-8")]
 #[inline]
 pub(crate) fn route_alloc_add(stack: &AllocationInfoStack, bytes: u64, count: u64) {
@@ -368,6 +339,7 @@ pub(crate) fn track_alloc(size: usize) {
         let info = &stack.elements[depth];
         info.bytes_total.set(info.bytes_total.get() + size as u64);
         info.count_total.set(info.count_total.get() + 1);
+        route_alloc_add(stack, size as u64, 1);
     });
 
     if !tracking_enabled {

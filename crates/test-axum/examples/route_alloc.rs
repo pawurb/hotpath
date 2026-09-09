@@ -5,6 +5,9 @@
 //! route next to the response-time table. `GET /big` builds a 1 MiB body,
 //! `GET /small` answers with a static string, and one unmatched request lands
 //! in `GET <unmatched>` with no memory attribution (no route scope).
+//! `GET /block` measures a block that spans an `.await`, so the block's own
+//! allocation frame is still open when the route scope closes for that poll;
+//! both halves of the block still count towards the route.
 //!
 //! Run with:
 //!   cargo run -p test-axum --example route_alloc --features hotpath,hotpath-alloc
@@ -19,6 +22,8 @@ use axum::Router;
 use std::time::Duration;
 
 const BIG_BYTES: usize = 1024 * 1024;
+const BLOCK_PRE_BYTES: usize = 128 * 1024;
+const BLOCK_POST_BYTES: usize = 256 * 1024;
 
 // Measured inside the handler: counts toward the route's inclusive total and
 // shows up in the `hotpath_function_route_*` families.
@@ -35,6 +40,19 @@ async fn small() -> &'static str {
     "ok"
 }
 
+// `measure_block!` around an `.await`: the block guard outlives the poll that
+// suspends, so its allocation frame is still open when the route scope closes.
+// The route counts what was allocated before and after the suspension.
+async fn block() -> Vec<u8> {
+    hotpath::measure_block!("block_await", {
+        let pre = std::hint::black_box(vec![b'x'; BLOCK_PRE_BYTES]);
+        tokio::task::yield_now().await;
+        let post = std::hint::black_box(vec![b'y'; BLOCK_POST_BYTES]);
+        drop(pre);
+        post
+    })
+}
+
 #[tokio::main]
 #[hotpath::main(report = "server")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -44,7 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let router = Router::new()
         .route("/big", get(big))
-        .route("/small", get(small));
+        .route("/small", get(small))
+        .route("/block", get(block));
     let app = if std::env::var("NESTED").is_ok_and(|v| v == "1") {
         // A nested router wrapped separately: the inner layer is inert.
         let nested = hotpath::axum!(Router::new().route("/big", get(big)));
@@ -60,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec!["/nested/big"; 3]
     } else {
         vec![
-            "/big", "/big", "/big", "/small", "/small", "/small", "/small",
+            "/big", "/big", "/big", "/small", "/small", "/small", "/small", "/block", "/block",
         ]
     };
     for path in paths {

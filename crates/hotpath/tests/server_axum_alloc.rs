@@ -10,6 +10,8 @@ pub mod tests {
     use std::process::Command;
 
     const BIG_BYTES: f64 = 1024.0 * 1024.0;
+    /// `GET /block` allocates 128 KiB before its `.await` and 256 KiB after.
+    const BLOCK_BYTES: f64 = (128.0 + 256.0) * 1024.0;
 
     fn run_example_raw(envs: &[(&str, &str)]) -> String {
         let mut cmd = Command::new("cargo");
@@ -88,6 +90,81 @@ pub mod tests {
         assert_eq!(alloc.bytes_per_request, None, "{alloc:?}");
         assert_eq!(alloc.allocs_per_request, None, "{alloc:?}");
         assert_eq!(alloc.total_bytes, 0, "{alloc:?}");
+    }
+
+    /// A `measure_block!` spanning an `.await` leaves the block's allocation
+    /// frame open when the route scope closes for that poll. Both halves count
+    /// towards the route, and neither counts twice.
+    #[test]
+    fn test_route_alloc_counts_block_spanning_await() {
+        let report = run_example(&[]);
+        let server = report.server.expect("No server section in report");
+
+        let block = by_route(&server.data, "GET /block");
+        assert_eq!(block.count, 2);
+        let alloc = block.alloc.as_ref().expect("GET /block alloc missing");
+        let bytes = alloc.bytes_per_request.expect("bytes_per_request");
+        assert!(bytes >= BLOCK_BYTES, "{alloc:?}");
+        assert!(bytes < 1.5 * BLOCK_BYTES, "{alloc:?}");
+    }
+
+    /// The route counts the block's bytes inclusively while the block itself
+    /// keeps reporting them as its own exclusive total: the scope adds no frame
+    /// to the allocation stack, so function accounting is unchanged.
+    #[test]
+    fn test_route_alloc_block_keeps_function_totals_exclusive() {
+        let report = run_example(&[("HOTPATH_REPORT", "server,functions-alloc")]);
+        let functions = report
+            .functions_alloc
+            .expect("No functions_alloc section in report");
+        let block = functions
+            .data
+            .iter()
+            .find(|f| f.name == "block_await")
+            .unwrap_or_else(|| panic!("block_await missing: {:?}", functions.data));
+        assert_eq!(block.calls, 2, "{block:?}");
+        // 128 KiB before the await plus 256 KiB after, both in the block's own
+        // frame, counted once.
+        assert!(
+            block.avg.starts_with("384.") && block.avg.ends_with("KB"),
+            "{block:?}"
+        );
+
+        let server = report.server.expect("No server section in report");
+        let alloc = by_route(&server.data, "GET /block")
+            .alloc
+            .as_ref()
+            .expect("GET /block alloc missing")
+            .clone();
+        assert!(alloc.bytes_per_request.unwrap() >= BLOCK_BYTES, "{alloc:?}");
+    }
+
+    /// `HOTPATH_ALLOC_CUMULATIVE=1` makes function frames inclusive by
+    /// propagating each pop into its parent. Route totals are inclusive either
+    /// way, so they must not pick the same bytes up twice.
+    #[test]
+    fn test_route_alloc_cumulative_mode_does_not_double_count() {
+        let report = run_example(&[("HOTPATH_ALLOC_CUMULATIVE", "1")]);
+        let server = report.server.expect("No server section in report");
+
+        let big = by_route(&server.data, "GET /big")
+            .alloc
+            .as_ref()
+            .expect("GET /big alloc missing")
+            .clone();
+        let bytes = big.bytes_per_request.expect("bytes_per_request");
+        assert!(bytes >= BIG_BYTES && bytes < 1.5 * BIG_BYTES, "{big:?}");
+
+        let block = by_route(&server.data, "GET /block")
+            .alloc
+            .as_ref()
+            .expect("GET /block alloc missing")
+            .clone();
+        let bytes = block.bytes_per_request.expect("bytes_per_request");
+        assert!(
+            bytes >= BLOCK_BYTES && bytes < 1.5 * BLOCK_BYTES,
+            "{block:?}"
+        );
     }
 
     #[test]
