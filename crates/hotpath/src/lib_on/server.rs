@@ -22,7 +22,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 
-use crate::lib_on::caller_stack::RequestCalls;
+use crate::lib_on::caller_stack::{RequestAlloc, RequestCalls};
 use crate::lib_on::{meta_rw_lock, MetaRwLock};
 
 use crate::batch::{EventProducer, EventQueueRegistry};
@@ -80,7 +80,9 @@ pub(crate) enum ServerEvent {
     /// completion time in ns since profiler start. `calls` holds the SQL
     /// queries and outbound HTTP requests issued under the request's route
     /// scope, `None` when the request had no scope (unmatched route, route
-    /// scoping disabled, or the route interner cap was hit).
+    /// scoping disabled, or the route interner cap was hit); `alloc` the
+    /// bytes and allocations made under that scope, `None` on the same
+    /// condition.
     Completed {
         route: Arc<str>,
         matched: bool,
@@ -88,6 +90,7 @@ pub(crate) enum ServerEvent {
         status: u16,
         timestamp_ns: u64,
         calls: Option<RequestCalls>,
+        alloc: Option<RequestAlloc>,
     },
 }
 
@@ -109,7 +112,16 @@ pub(crate) struct ServerEntry {
     pub(crate) sql_calls: u64,
     /// Outbound HTTP requests issued by scoped requests.
     pub(crate) http_calls: u64,
+    /// Bytes allocated by scoped requests (`hotpath-alloc` only, else 0).
+    pub(crate) alloc_bytes: u64,
+    /// Allocations made by scoped requests (`hotpath-alloc` only, else 0).
+    pub(crate) alloc_count: u64,
     hist: Option<Histogram<u64>>,
+    /// Bytes allocated per scoped request; same bounds as the function alloc
+    /// histograms so the exported buckets line up with
+    /// `hotpath_function_alloc_bytes`. `None` without `hotpath-alloc`, where
+    /// every request would record a zero into ~170 KB of buckets per route.
+    bytes_hist: Option<Histogram<u64>>,
 }
 
 fn per_request(calls: u64, scoped_count: u64) -> Option<f64> {
@@ -119,6 +131,8 @@ fn per_request(calls: u64, scoped_count: u64) -> Option<f64> {
 impl ServerEntry {
     const LOW_NS: u64 = 1;
     const HIGH_NS: u64 = crate::lib_on::MAX_DURATION_NS;
+    const LOW_BYTES: u64 = 1;
+    const HIGH_BYTES: u64 = 1_000_000_000; // 1GB
     const SIGFIGS: u8 = 3;
 
     fn new(id: u32, route: String) -> Self {
@@ -132,8 +146,20 @@ impl ServerEntry {
             scoped_count: 0,
             sql_calls: 0,
             http_calls: 0,
+            alloc_bytes: 0,
+            alloc_count: 0,
             hist: Histogram::<u64>::new_with_bounds(Self::LOW_NS, Self::HIGH_NS, Self::SIGFIGS)
                 .ok(),
+            bytes_hist: cfg!(feature = "hotpath-alloc")
+                .then(|| {
+                    Histogram::<u64>::new_with_bounds(
+                        Self::LOW_BYTES,
+                        Self::HIGH_BYTES,
+                        Self::SIGFIGS,
+                    )
+                    .ok()
+                })
+                .flatten(),
         }
     }
 
@@ -143,6 +169,78 @@ impl ServerEntry {
             hist.record(nanos.clamp(Self::LOW_NS, Self::HIGH_NS))
                 .unwrap();
         }
+    }
+
+    /// Zero is always recordable regardless of the histogram's lowest
+    /// discernible value, so requests that allocated nothing count toward
+    /// the percentiles.
+    #[inline]
+    fn record_alloc(&mut self, alloc: RequestAlloc) {
+        self.alloc_bytes += alloc.bytes;
+        self.alloc_count += alloc.count;
+        if let Some(ref mut hist) = self.bytes_hist {
+            hist.record(alloc.bytes.min(Self::HIGH_BYTES)).unwrap();
+        }
+    }
+
+    /// Average bytes allocated per scoped request, `None` when no completed
+    /// request of this route carried a route scope.
+    pub(crate) fn bytes_per_request(&self) -> Option<f64> {
+        per_request(self.alloc_bytes, self.scoped_count)
+    }
+
+    /// Average allocations per scoped request, `None` when no completed
+    /// request of this route carried a route scope.
+    pub(crate) fn allocs_per_request(&self) -> Option<f64> {
+        per_request(self.alloc_count, self.scoped_count)
+    }
+
+    pub(crate) fn avg_bytes(&self) -> u64 {
+        self.alloc_bytes.checked_div(self.scoped_count).unwrap_or(0)
+    }
+
+    pub(crate) fn percentile_bytes(&self, p: f64) -> u64 {
+        match self.bytes_hist {
+            Some(ref hist) if self.scoped_count > 0 => {
+                hist.value_at_percentile(p.clamp(0.0, 100.0))
+            }
+            _ => 0,
+        }
+    }
+
+    pub(crate) fn alloc_histogram_base64(&self) -> Option<String> {
+        if self.scoped_count == 0 {
+            return None;
+        }
+        crate::lib_on::histograms::histogram_base64(self.bytes_hist.as_ref()?)
+    }
+
+    /// Sparse native-histogram buckets of bytes per scoped request.
+    #[cfg(all(feature = "hotpath-prometheus", feature = "hotpath-alloc"))]
+    pub(crate) fn alloc_native_buckets(&self, schema: i32) -> Vec<(i32, u64)> {
+        crate::lib_on::native_histograms::native_buckets_opt(
+            self.bytes_hist.as_ref(),
+            self.scoped_count > 0,
+            schema,
+            crate::lib_on::native_histograms::UNIT_SCALE,
+        )
+    }
+
+    /// Cumulative classic-bucket counts of bytes per scoped request at or
+    /// below each boundary.
+    #[cfg(all(feature = "hotpath-prometheus", feature = "hotpath-alloc"))]
+    pub(crate) fn alloc_classic_buckets(&self, boundaries: &[u64]) -> Vec<u64> {
+        crate::lib_on::native_histograms::classic_buckets_opt(
+            self.bytes_hist.as_ref(),
+            self.scoped_count > 0,
+            boundaries,
+        )
+    }
+
+    /// Scoped requests that allocated nothing (native `zero_count`).
+    #[cfg(all(feature = "hotpath-prometheus", feature = "hotpath-alloc"))]
+    pub(crate) fn alloc_zero_count(&self) -> u64 {
+        self.bytes_hist.as_ref().map_or(0, |h| h.count_at(0))
     }
 
     /// Average SQL queries per scoped request, `None` when no completed
@@ -292,6 +390,7 @@ fn process_server_event(state: &mut ServerInternalState, event: ServerEvent) {
         status,
         timestamp_ns,
         calls,
+        alloc,
     } = event;
 
     // Scanner spam is by definition unmatched + error status; collapsing only
@@ -323,6 +422,7 @@ fn process_server_event(state: &mut ServerInternalState, event: ServerEvent) {
         entry.scoped_count += 1;
         entry.sql_calls += u64::from(calls.sql);
         entry.http_calls += u64::from(calls.http);
+        entry.record_alloc(alloc.unwrap_or_default());
     }
 
     let logs = state.logs.entry(entry.id).or_default();
@@ -444,11 +544,19 @@ macro_rules! axum {
 
 #[cfg(test)]
 mod tests {
-    use crate::lib_on::caller_stack::RequestCalls;
+    use crate::lib_on::caller_stack::{RequestAlloc, RequestCalls};
     use crate::lib_on::server::{process_server_event, ServerEvent, ServerInternalState};
     use std::sync::Arc;
 
     fn completed(route: &str, calls: Option<RequestCalls>) -> ServerEvent {
+        completed_alloc(route, calls, calls.map(|_| RequestAlloc::ZERO))
+    }
+
+    fn completed_alloc(
+        route: &str,
+        calls: Option<RequestCalls>,
+        alloc: Option<RequestAlloc>,
+    ) -> ServerEvent {
         ServerEvent::Completed {
             route: Arc::from(route),
             matched: true,
@@ -456,6 +564,7 @@ mod tests {
             status: 200,
             timestamp_ns: 0,
             calls,
+            alloc,
         }
     }
 
@@ -465,11 +574,25 @@ mod tests {
         let route = "GET /users/{id}";
         process_server_event(
             &mut state,
-            completed(route, Some(RequestCalls { sql: 3, http: 1 })),
+            completed_alloc(
+                route,
+                Some(RequestCalls { sql: 3, http: 1 }),
+                Some(RequestAlloc {
+                    bytes: 3_000,
+                    count: 30,
+                }),
+            ),
         );
         process_server_event(
             &mut state,
-            completed(route, Some(RequestCalls { sql: 1, http: 0 })),
+            completed_alloc(
+                route,
+                Some(RequestCalls { sql: 1, http: 0 }),
+                Some(RequestAlloc {
+                    bytes: 1_000,
+                    count: 10,
+                }),
+            ),
         );
         // A request that lost its scope (interner cap) counts as a request
         // but not towards the averages.
@@ -480,11 +603,45 @@ mod tests {
         assert_eq!(entry.scoped_count, 2);
         assert_eq!(entry.sql_per_request(), Some(2.0));
         assert_eq!(entry.http_per_request(), Some(0.5));
+        assert_eq!(entry.alloc_bytes, 4_000);
+        assert_eq!(entry.alloc_count, 40);
+        assert_eq!(entry.bytes_per_request(), Some(2_000.0));
+        assert_eq!(entry.allocs_per_request(), Some(20.0));
+        assert_eq!(entry.avg_bytes(), 2_000);
+        // hdrhistogram reports the highest equivalent value of its 0.1% bin;
+        // without the counting allocator there is no histogram at all.
+        if cfg!(feature = "hotpath-alloc") {
+            assert!((3_000..=3_003).contains(&entry.percentile_bytes(100.0)));
+        }
 
         process_server_event(&mut state, completed("GET /missing", None));
         let unscoped = &state.stats["GET /missing"];
         assert_eq!(unscoped.sql_per_request(), None);
         assert_eq!(unscoped.http_per_request(), None);
+        assert_eq!(unscoped.bytes_per_request(), None);
+        assert_eq!(unscoped.allocs_per_request(), None);
+        assert_eq!(unscoped.percentile_bytes(50.0), 0);
+    }
+
+    #[cfg(feature = "hotpath-alloc")]
+    #[test]
+    fn zero_byte_requests_count_toward_alloc_percentiles() {
+        let mut state = ServerInternalState::default();
+        let route = "GET /static";
+        for bytes in [0, 0, 0, 4_000] {
+            process_server_event(
+                &mut state,
+                completed_alloc(
+                    route,
+                    Some(RequestCalls::ZERO),
+                    Some(RequestAlloc { bytes, count: 0 }),
+                ),
+            );
+        }
+        let entry = &state.stats[route];
+        assert_eq!(entry.scoped_count, 4);
+        assert_eq!(entry.percentile_bytes(50.0), 0);
+        assert!((4_000..=4_004).contains(&entry.percentile_bytes(100.0)));
     }
 
     fn unmatched(route: &str, status: u16) -> ServerEvent {
@@ -495,6 +652,7 @@ mod tests {
             status,
             timestamp_ns: 0,
             calls: None,
+            alloc: None,
         }
     }
 
@@ -549,5 +707,26 @@ mod histogram_tests {
     fn histogram_absent_without_responses() {
         let entry = ServerEntry::new(1, "GET /".to_string());
         assert!(entry.histogram_base64().is_none());
+        assert!(entry.alloc_histogram_base64().is_none());
+    }
+
+    #[cfg(feature = "hotpath-alloc")]
+    #[test]
+    fn alloc_histogram_encodes_scoped_requests() {
+        use crate::lib_on::caller_stack::RequestAlloc;
+
+        let mut entry = ServerEntry::new(1, "GET /".to_string());
+        entry.count = 2;
+        entry.scoped_count = 2;
+        entry.record_alloc(RequestAlloc { bytes: 0, count: 0 });
+        entry.record_alloc(RequestAlloc {
+            bytes: 65_536,
+            count: 3,
+        });
+
+        let hist = decode_histogram(&entry.alloc_histogram_base64().unwrap());
+        assert_eq!(hist.len(), 2);
+        assert_eq!(hist.count_at(0), 1);
+        assert!(hist.equivalent(hist.max(), 65_536));
     }
 }

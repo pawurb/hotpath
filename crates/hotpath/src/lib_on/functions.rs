@@ -414,6 +414,64 @@ pub(crate) fn get_cpu_label_aliases() -> HashMap<&'static str, &'static str> {
         .unwrap_or_default()
 }
 
+/// Per-route slice of one function's measurements (calls made under an axum
+/// route scope), running totals only - what the Prometheus
+/// `hotpath_function_route_*` families export. The report stays per function.
+#[derive(Debug, Default, Clone)]
+#[cfg(feature = "hotpath-prometheus")]
+pub(crate) struct RouteFunctionStats {
+    pub(crate) count: u64,
+    /// Calls that carried a duration (not skipped by time sampling).
+    pub(crate) sampled_count: u64,
+    pub(crate) total_duration_ns: u64,
+    pub(crate) total_bytes: u64,
+    pub(crate) total_allocs: u64,
+}
+
+#[cfg(feature = "hotpath-prometheus")]
+pub(crate) type RouteStatsMap = HashMap<&'static str, RouteFunctionStats>;
+
+#[cfg(feature = "hotpath-prometheus")]
+impl RouteFunctionStats {
+    #[inline]
+    pub(crate) fn record(
+        &mut self,
+        duration_ns: Option<u64>,
+        bytes_total: Option<u64>,
+        count_total: Option<u64>,
+    ) {
+        self.count += 1;
+        if let Some(duration_ns) = duration_ns {
+            self.sampled_count += 1;
+            self.total_duration_ns += duration_ns;
+        }
+        self.total_bytes += bytes_total.unwrap_or(0);
+        self.total_allocs += count_total.unwrap_or(0);
+    }
+}
+
+/// Raw per-route slice of a function for the Prometheus exporter, sorted by
+/// route so the scrape output is stable.
+#[cfg(feature = "hotpath-prometheus")]
+#[derive(Debug, Clone)]
+pub(crate) struct RawRouteFunction {
+    pub(crate) route: &'static str,
+    pub(crate) stats: RouteFunctionStats,
+}
+
+#[cfg(feature = "hotpath-prometheus")]
+pub(crate) fn raw_routes(routes: &RouteStatsMap) -> Vec<RawRouteFunction> {
+    let mut raw: Vec<RawRouteFunction> = routes
+        .iter()
+        .map(|(&route, stats)| RawRouteFunction {
+            route,
+            stats: stats.clone(),
+        })
+        .collect();
+    raw.sort_by(|a, b| a.route.cmp(b.route));
+    raw
+}
+
 /// Raw timing snapshot entry for the Prometheus exporter - numeric fields
 /// only, both bucket projections pre-computed worker-side (native at
 /// `crate::prometheus_server::NATIVE_SCHEMA`, classic on
@@ -431,6 +489,7 @@ pub(crate) struct RawFunctionTiming {
     pub(crate) total_duration_ns: u64,
     pub(crate) native_buckets: Vec<(i32, u64)>,
     pub(crate) bucket_counts: Vec<u64>,
+    pub(crate) routes: Vec<RawRouteFunction>,
 }
 
 /// Raw allocation snapshot entry for the Prometheus exporter - numeric fields
@@ -455,6 +514,7 @@ pub(crate) struct RawFunctionAlloc {
     /// native format carries in zero_count rather than a log-scale bucket.
     pub(crate) bytes_zero_count: u64,
     pub(crate) allocs_zero_count: u64,
+    pub(crate) routes: Vec<RawRouteFunction>,
 }
 
 /// Query request sent from TUI HTTP server to profiler worker thread

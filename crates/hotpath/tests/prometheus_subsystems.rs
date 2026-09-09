@@ -211,6 +211,169 @@ pub mod tests {
             assert_eq!(scoped_value("hotpath_server_scoped_requests_total"), 3.0);
             assert_eq!(scoped_value("hotpath_server_sql_calls_total"), 6.0);
             assert_eq!(scoped_value("hotpath_server_http_calls_total"), 3.0);
+
+            // Timing-mode functions are split by route too: load_user runs
+            // under both routes (2 + 3 calls), count_users under one.
+            let function_route_value = |name: &str, function: &str, route: &str| {
+                body.lines()
+                    .find_map(|l| {
+                        parse_line(l).filter(|(n, labels, _)| {
+                            *n == name
+                                && label_value(labels, "function") == function
+                                && label_value(labels, "route") == route
+                        })
+                    })
+                    .map(|(_, _, value)| value.parse::<f64>().unwrap())
+                    .unwrap_or_else(|| panic!("{name} series for {function} / {route} missing"))
+            };
+            let calls = "hotpath_function_route_calls_total";
+            assert_eq!(
+                function_route_value(calls, "route_scope::load_user", "GET /users/{id}"),
+                5.0
+            );
+            assert_eq!(
+                function_route_value(calls, "route_scope::load_user", "GET /profiles/{id}"),
+                3.0
+            );
+            assert_eq!(
+                function_route_value(calls, "route_scope::count_users", "GET /profiles/{id}"),
+                3.0
+            );
+            assert!(
+                function_route_value(
+                    "hotpath_function_route_duration_seconds_total",
+                    "route_scope::load_user",
+                    "GET /profiles/{id}"
+                ) > 0.0
+            );
+            assert!(
+                !body.contains("hotpath_function_route_alloc_bytes_total"),
+                "alloc route families exported without hotpath-alloc"
+            );
+        });
+
+        let _ = child.kill();
+        let _ = child.wait();
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
+        }
+    }
+
+    // cargo run -p test-axum --example route_alloc --features hotpath,hotpath-alloc,hotpath-prometheus
+    #[test]
+    fn test_server_alloc_families() {
+        let mut child = Command::new("cargo")
+            .args([
+                "run",
+                "-p",
+                "test-axum",
+                "--example",
+                "route_alloc",
+                "--features",
+                "hotpath,hotpath-alloc,hotpath-prometheus",
+            ])
+            .env("HOTPATH_METRICS_PORT", METRICS_PORT)
+            .env("HOTPATH_PROMETHEUS_PORT", PROMETHEUS_PORT)
+            .env("TEST_SLEEP_SECONDS", "15")
+            .spawn()
+            .expect("Failed to spawn command");
+
+        // The example serves exactly 3 GET /big requests.
+        let mut scrape = None;
+        for _attempt in 0..80 {
+            sleep(Duration::from_millis(750));
+            if let Ok((200, body)) = get("/metrics") {
+                if body.contains("hotpath_server_scoped_requests_total{route=\"GET /big\"} 3") {
+                    scrape = Some(body);
+                    break;
+                }
+            }
+        }
+        let Some(body) = scrape else {
+            let _ = child.kill();
+            panic!(
+                "Prometheus server did not serve server alloc metrics on port {PROMETHEUS_PORT}"
+            );
+        };
+
+        let result = std::panic::catch_unwind(|| {
+            for family in [
+                "hotpath_server_alloc_bytes_total",
+                "hotpath_server_alloc_count_total",
+                "hotpath_server_alloc_bytes",
+            ] {
+                assert!(
+                    body.contains(&format!("# TYPE {family} ")),
+                    "missing family {family}, body:\n{body}"
+                );
+            }
+            assert_histogram_family(&body, "hotpath_server_alloc_bytes");
+
+            let route_value = |name: &str, route: &str| {
+                body.lines()
+                    .find_map(|l| {
+                        parse_line(l).filter(|(n, labels, _)| {
+                            *n == name && label_value(labels, "route") == route
+                        })
+                    })
+                    .map(|(_, _, value)| value.parse::<f64>().unwrap())
+                    .unwrap_or_else(|| panic!("{name} series for {route} missing"))
+            };
+            // Three 1 MiB bodies, and at least one allocation each.
+            let big_bytes = route_value("hotpath_server_alloc_bytes_total", "GET /big");
+            assert!(big_bytes >= 3.0 * 1024.0 * 1024.0, "{big_bytes}");
+            assert!(route_value("hotpath_server_alloc_count_total", "GET /big") >= 3.0);
+            assert_eq!(
+                route_value("hotpath_server_alloc_bytes_count", "GET /big"),
+                3.0
+            );
+            assert_eq!(
+                route_value("hotpath_server_alloc_bytes_sum", "GET /big"),
+                big_bytes
+            );
+            assert!(route_value("hotpath_server_alloc_bytes_total", "GET /small") < 64.0 * 1024.0);
+
+            // Unmatched requests carry no scope: counters exist at zero, but
+            // there is no per-request distribution to export.
+            assert_eq!(
+                route_value("hotpath_server_alloc_bytes_total", "GET <unmatched>"),
+                0.0
+            );
+            assert!(
+                !body.contains("hotpath_server_alloc_bytes_count{route=\"GET <unmatched>\"}"),
+                "unscoped route exported a histogram, body:\n{body}"
+            );
+
+            // Measured functions are split by the route they ran under.
+            let function_route_value = |name: &str| {
+                body.lines()
+                    .find_map(|l| {
+                        parse_line(l).filter(|(n, labels, _)| {
+                            *n == name
+                                && label_value(labels, "function") == "route_alloc::build_body"
+                                && label_value(labels, "route") == "GET /big"
+                        })
+                    })
+                    .map(|(_, _, value)| value.parse::<f64>().unwrap())
+                    .unwrap_or_else(|| panic!("{name} series for build_body / GET /big missing"))
+            };
+            assert_eq!(
+                function_route_value("hotpath_function_route_calls_total"),
+                3.0
+            );
+            assert_eq!(
+                function_route_value("hotpath_function_route_timed_calls_total"),
+                3.0
+            );
+            assert!(function_route_value("hotpath_function_route_duration_seconds_total") > 0.0);
+            assert!(
+                function_route_value("hotpath_function_route_alloc_bytes_total")
+                    >= 3.0 * 1024.0 * 1024.0
+            );
+            assert_eq!(
+                function_route_value("hotpath_function_route_alloc_count_total"),
+                3.0
+            );
         });
 
         let _ = child.kill();

@@ -487,6 +487,7 @@ impl App {
                 current_elapsed_ns: 0,
                 total_ns: 0,
                 total_calls: 0,
+                total_alloc_bytes: 0,
                 percentiles: vec![],
                 data: vec![],
                 total_count: 0,

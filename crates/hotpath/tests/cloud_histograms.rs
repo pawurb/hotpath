@@ -173,6 +173,49 @@ mod tests {
         }
     }
 
+    // cargo run -p test-axum --example route_alloc --features hotpath,hotpath-alloc,hotpath-cloud
+    #[test]
+    fn server_alloc_histograms_attached_when_upload_enabled() {
+        let output = run_with_features(
+            "test-axum",
+            "route_alloc",
+            "hotpath,hotpath-alloc,hotpath-cloud",
+            None,
+            true,
+        );
+        let report = parse_report(&String::from_utf8_lossy(&output.stdout));
+
+        let server = report.server.expect("No server section in report");
+        assert!(!server.data.is_empty());
+        for entry in &server.data {
+            let alloc = entry
+                .alloc
+                .as_ref()
+                .unwrap_or_else(|| panic!("alloc missing for route {}", entry.route));
+            // Scoped routes carry one bytes sample per request; the unmatched
+            // route has no scope and no histogram.
+            if alloc.bytes_per_request.is_some() {
+                let b64 = alloc
+                    .histogram
+                    .as_ref()
+                    .unwrap_or_else(|| panic!("alloc histogram missing for {}", entry.route));
+                let hist = decode(b64);
+                assert_eq!(hist.len(), entry.count, "route {}", entry.route);
+                // The histogram resolves 0.1%, so its mean only approximates
+                // the exact per-request average.
+                let expected = alloc.bytes_per_request.unwrap();
+                assert!(
+                    (hist.mean() - expected).abs() <= expected * 0.005 + 1.0,
+                    "route {}: histogram mean {} vs {expected}",
+                    entry.route,
+                    hist.mean()
+                );
+            } else {
+                assert!(alloc.histogram.is_none(), "route {}", entry.route);
+            }
+        }
+    }
+
     #[test]
     fn server_sql_http_histograms_absent_without_the_cloud_feature() {
         let output = run_without_cloud("test-axum", "route_scope", None);

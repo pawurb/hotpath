@@ -491,6 +491,123 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Bytes allocated per request: $route (1m window)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hotpath-prom"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(hotpath_server_alloc_bytes_bucket{route=~\"$route\"}[1m])))",
+          "legendFormat": "{{route}} p99",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (route) (rate(hotpath_server_alloc_bytes_sum{route=~\"$route\"}[1m])) / sum by (route) (rate(hotpath_server_alloc_bytes_count{route=~\"$route\"}[1m]))",
+          "legendFormat": "{{route}} avg",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Allocations per request: $route (1m window)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hotpath-prom"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "rate(hotpath_server_alloc_count_total{route=~\"$route\"}[1m]) / rate(hotpath_server_scoped_requests_total{route=~\"$route\"}[1m])",
+          "legendFormat": "{{route}} allocs/req",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "timeseries",
+      "title": "Function time spent: $route (top 10, 1m window)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hotpath-prom"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (function) (rate(hotpath_function_route_duration_seconds_total{route=~\"$route\"}[1m])))",
+          "legendFormat": "{{function}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "timeseries",
+      "title": "Function allocation rate: $route (top 10, 1m window)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hotpath-prom"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 72
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (function) (rate(hotpath_function_route_alloc_bytes_total{route=~\"$route\"}[1m])))",
+          "legendFormat": "{{function}}",
+          "refId": "A"
+        }
+      ]
     }
   ]
 }

@@ -413,6 +413,7 @@ fn render_io_view(frame: &mut Frame, app: &mut App, area: Rect) {
             &app.server.percentiles,
             app.server.total_ns,
             app.server.total_calls,
+            app.server.total_alloc_bytes,
             table_area,
             frame,
             &mut app.server_table_state,

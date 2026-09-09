@@ -339,6 +339,8 @@ fn collect_families() -> Option<Vec<Family>> {
                 .collect(),
         });
 
+        collect_functions_routes(&mut families, &functions);
+
         families.push(Family {
             name: "hotpath_function_duration_seconds",
             help: "Duration of sampled calls of each instrumented function.",
@@ -376,6 +378,59 @@ fn collect_families() -> Option<Vec<Family>> {
     collect_gauges(&mut families);
 
     Some(families)
+}
+
+/// One `(function, route)` sample per route a function ran under, from the
+/// per-route slices every function keeps (see `RouteFunctionStats`).
+fn route_samples<'a>(
+    functions: impl IntoIterator<Item = (&'a str, &'a [crate::functions::RawRouteFunction])>,
+    value: impl Fn(&crate::functions::RouteFunctionStats) -> f64,
+) -> Vec<Sample> {
+    let value = &value;
+    functions
+        .into_iter()
+        .flat_map(|(name, routes)| {
+            routes.iter().map(move |r| Sample {
+                labels: vec![
+                    ("function", name.to_string()),
+                    ("route", r.route.to_string()),
+                ],
+                value: SampleValue::Scalar(value(&r.stats)),
+            })
+        })
+        .collect()
+}
+
+/// Calls and time of each function split by the axum route they ran under;
+/// running totals only, the per-function families keep the distributions.
+#[cfg_attr(feature = "hotpath-meta", hotpath_meta::measure(log = true))]
+fn collect_functions_routes(
+    families: &mut Vec<Family>,
+    functions: &[crate::functions::RawFunctionTiming],
+) {
+    if functions.iter().all(|f| f.routes.is_empty()) {
+        return;
+    }
+    let slices = || functions.iter().map(|f| (f.name, f.routes.as_slice()));
+
+    families.push(Family {
+        name: "hotpath_function_route_calls_total",
+        help: "Calls of each instrumented function made under an axum route scope, per route.",
+        kind: FamilyKind::Counter,
+        samples: route_samples(slices(), |s| s.count as f64),
+    });
+    families.push(Family {
+        name: "hotpath_function_route_timed_calls_total",
+        help: "Route-scoped calls that carried a duration (not skipped by time sampling); the denominator for per-call time.",
+        kind: FamilyKind::Counter,
+        samples: route_samples(slices(), |s| s.sampled_count as f64),
+    });
+    families.push(Family {
+        name: "hotpath_function_route_duration_seconds_total",
+        help: "Time spent in each instrumented function under each axum route, over timed calls.",
+        kind: FamilyKind::Counter,
+        samples: route_samples(slices(), |s| seconds(s.total_duration_ns)),
+    });
 }
 
 #[cfg_attr(feature = "hotpath-meta", hotpath_meta::measure(log = true))]
@@ -442,6 +497,22 @@ fn collect_functions_alloc(families: &mut Vec<Family>) -> Option<()> {
             help: "Bytes allocated per call of each instrumented function; values clamp at 1GB.",
             kind: FamilyKind::Histogram,
             samples: bytes_samples,
+        });
+    }
+
+    if functions.iter().any(|f| !f.routes.is_empty()) {
+        let slices = || functions.iter().map(|f| (f.name, f.routes.as_slice()));
+        families.push(Family {
+            name: "hotpath_function_route_alloc_bytes_total",
+            help: "Bytes allocated by each instrumented function under each axum route.",
+            kind: FamilyKind::Counter,
+            samples: route_samples(slices(), |s| s.total_bytes as f64),
+        });
+        families.push(Family {
+            name: "hotpath_function_route_alloc_count_total",
+            help: "Allocations made by each instrumented function under each axum route.",
+            kind: FamilyKind::Counter,
+            samples: route_samples(slices(), |s| s.total_allocs as f64),
         });
     }
 
@@ -1228,6 +1299,71 @@ fn collect_server(families: &mut Vec<Family>) {
             })
             .collect(),
     });
+
+    #[cfg(feature = "hotpath-alloc")]
+    collect_server_alloc(families, &entries);
+}
+
+/// Per-route memory; without the counting allocator every value would be 0.
+#[cfg(feature = "hotpath-alloc")]
+fn collect_server_alloc(
+    families: &mut Vec<Family>,
+    entries: &[crate::lib_on::server::ServerEntry],
+) {
+    let route_labels = |e: &crate::lib_on::server::ServerEntry| vec![("route", e.route.clone())];
+
+    families.push(Family {
+        name: "hotpath_server_alloc_bytes_total",
+        help: "Bytes allocated by route-scoped requests; divide by hotpath_server_scoped_requests_total for bytes per request.",
+        kind: FamilyKind::Counter,
+        samples: entries
+            .iter()
+            .map(|e| Sample {
+                labels: route_labels(e),
+                value: SampleValue::Scalar(e.alloc_bytes as f64),
+            })
+            .collect(),
+    });
+
+    families.push(Family {
+        name: "hotpath_server_alloc_count_total",
+        help: "Allocations made by route-scoped requests; divide by hotpath_server_scoped_requests_total for allocations per request.",
+        kind: FamilyKind::Counter,
+        samples: entries
+            .iter()
+            .map(|e| Sample {
+                labels: route_labels(e),
+                value: SampleValue::Scalar(e.alloc_count as f64),
+            })
+            .collect(),
+    });
+
+    // Routes without a scoped request have no per-request distribution.
+    let samples: Vec<Sample> = entries
+        .iter()
+        .filter(|e| e.scoped_count > 0)
+        .map(|e| Sample {
+            labels: route_labels(e),
+            value: SampleValue::Histogram(HistogramValue {
+                sample_count: e.scoped_count,
+                sum: e.alloc_bytes as f64,
+                classic_buckets: classic_pairs_units(
+                    ALLOC_LADDER_BYTES,
+                    e.alloc_classic_buckets(ALLOC_LADDER_BYTES),
+                ),
+                native_buckets: e.alloc_native_buckets(NATIVE_SCHEMA),
+                zero_count: e.alloc_zero_count(),
+            }),
+        })
+        .collect();
+    if !samples.is_empty() {
+        families.push(Family {
+            name: "hotpath_server_alloc_bytes",
+            help: "Bytes allocated per route-scoped request; values clamp at 1GB.",
+            kind: FamilyKind::Histogram,
+            samples,
+        });
+    }
 }
 
 #[cfg(feature = "threads")]

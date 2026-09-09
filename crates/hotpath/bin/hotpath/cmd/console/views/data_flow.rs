@@ -795,9 +795,178 @@ pub(crate) fn render_http_panel(
     frame.render_stateful_widget(table, area, table_state);
 }
 
+/// Response time per route, with a memory-per-route table stacked under it
+/// when the profiled program reports allocations; same row order so the
+/// shared cursor highlights the same route in both halves.
 #[hotpath::measure]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn render_server_panel(
+    entries: &[JsonServerEntry],
+    percentiles: &[f64],
+    total_ns: u64,
+    total_calls: u64,
+    total_alloc_bytes: u64,
+    area: Rect,
+    frame: &mut Frame,
+    table_state: &mut TableState,
+    show_logs: bool,
+    list_focused: bool,
+    position: usize,
+    total: usize,
+) {
+    let show_alloc = entries.iter().any(|e| e.alloc.is_some());
+    if !show_alloc {
+        render_server_timing_table(
+            entries,
+            percentiles,
+            total_ns,
+            total_calls,
+            area,
+            frame,
+            table_state,
+            show_logs,
+            list_focused,
+            position,
+            total,
+        );
+        return;
+    }
+
+    let halves = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+        .split(area);
+
+    render_server_timing_table(
+        entries,
+        percentiles,
+        total_ns,
+        total_calls,
+        halves[0],
+        frame,
+        table_state,
+        show_logs,
+        list_focused,
+        position,
+        total,
+    );
+    render_server_alloc_table(
+        entries,
+        percentiles,
+        total_alloc_bytes,
+        halves[1],
+        frame,
+        table_state,
+        position,
+        total,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_server_alloc_table(
+    entries: &[JsonServerEntry],
+    percentiles: &[f64],
+    total_alloc_bytes: u64,
+    area: Rect,
+    frame: &mut Frame,
+    table_state: &mut TableState,
+    position: usize,
+    total: usize,
+) {
+    let available_width = area.width.saturating_sub(10);
+    let route_width = ((available_width as f32 * 0.40) as usize).max(20);
+
+    let percentile_keys: Vec<String> = percentiles
+        .iter()
+        .map(|p| hotpath::format_percentile_key(*p))
+        .collect();
+
+    let mut header_cells = vec![
+        Cell::from("Route"),
+        Cell::from("Calls"),
+        Cell::from("Allocs/req"),
+        Cell::from("Avg"),
+    ];
+    for p in percentiles {
+        header_cells.push(Cell::from(hotpath::format_percentile_header(*p)));
+    }
+    header_cells.push(Cell::from("Total"));
+    header_cells.push(Cell::from("% Total"));
+    let header = Row::new(header_cells)
+        .style(common_styles::HEADER_STYLE_CYAN)
+        .height(1);
+
+    let rows: Vec<Row> = entries
+        .iter()
+        .map(|entry| {
+            let mut cells = vec![
+                Cell::from(truncate_right(&entry.route, route_width)),
+                Cell::from(entry.count.to_string()),
+            ];
+            match entry
+                .alloc
+                .as_ref()
+                .filter(|a| a.bytes_per_request.is_some())
+            {
+                Some(alloc) => {
+                    cells.push(Cell::from(
+                        alloc
+                            .allocs_per_request
+                            .map_or_else(|| "-".to_string(), |v| format!("{v:.1}")),
+                    ));
+                    cells.push(Cell::from(alloc.avg.clone()));
+                    for key in &percentile_keys {
+                        cells.push(Cell::from(
+                            alloc.percentiles.get(key).cloned().unwrap_or_default(),
+                        ));
+                    }
+                    cells.push(Cell::from(alloc.total.clone()));
+                    cells.push(Cell::from(alloc.percent_total.clone()));
+                }
+                None => {
+                    for _ in 0..(4 + percentile_keys.len()) {
+                        cells.push(Cell::from("-"));
+                    }
+                }
+            }
+            Row::new(cells)
+        })
+        .collect();
+
+    let mut widths = vec![
+        Constraint::Percentage(40),
+        Constraint::Length(8),
+        Constraint::Length(10),
+        Constraint::Length(10),
+    ];
+    for _ in percentiles {
+        widths.push(Constraint::Length(10));
+    }
+    widths.push(Constraint::Length(10));
+    widths.push(Constraint::Length(8));
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(list_block(
+            format!(
+                " Server - memory per route (allocated: {}) ",
+                hotpath::format_bytes(total_alloc_bytes)
+            ),
+            false,
+            true,
+            position,
+            total,
+        ))
+        .column_spacing(1)
+        .row_highlight_style(common_styles::SELECTED_ROW_STYLE)
+        .highlight_symbol(">> ")
+        .highlight_spacing(HighlightSpacing::Always);
+
+    frame.render_stateful_widget(table, area, table_state);
+}
+
+#[allow(clippy::too_many_arguments)]
+fn render_server_timing_table(
     entries: &[JsonServerEntry],
     percentiles: &[f64],
     total_ns: u64,

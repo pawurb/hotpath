@@ -458,6 +458,80 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Server p99 bytes allocated per request by route (1m window)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hotpath-prom"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 63
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(hotpath_server_alloc_bytes_bucket[1m])))",
+          "legendFormat": "{{route}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "timeseries",
+      "title": "Server allocation rate by route (1m window)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "hotpath-prom"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 63
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "rate(hotpath_server_alloc_bytes_total[1m])",
+          "legendFormat": "{{route}} B/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(hotpath_server_alloc_bytes_total[1m]) / rate(hotpath_server_scoped_requests_total[1m])",
+          "legendFormat": "{{route}} B/req",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }
