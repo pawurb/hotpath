@@ -7,23 +7,15 @@ on:
 
 # Uploads the report a pull request job produced. That job runs the pull
 # request's code and gets no OIDC token; this one holds the token and never
-# checks out or executes anything from the pull request - it unzips an
-# artifact, checks it with `jq` and makes one HTTP request.
+# checks out or executes anything from the pull request.
 #
-# The artifact is a document the pull request wrote, and its pull request
-# context (number, base/head refs, event-time base sha) is taken at face value:
-# lying there only misdirects or distorts the pull request's own comment, and
-# the fork's job read those values from its `pull_request` event, which is a
-# better source than anything this job could look up after the fact. Only the
-# two fields that could affect other reports are enforced. `ci.event` has to be
-# `pull_request` - claiming `push` on `refs/heads/main` would make the report
-# the baseline every later pull request is compared against - and
-# `meta.benchmark` is pinned, since the server prefers it over the
-# `?benchmark=` query and a forged value would file the report under another
-# series.
+# The pull request context in the artifact is trusted: lying there only
+# distorts the pull request's own comment. Two fields could affect other
+# reports and are enforced: `ci.event` must be `pull_request` (a `push` on
+# `main` would become everyone's baseline) and `meta.benchmark` is pinned (the
+# server prefers it over the `?benchmark=` query).
 #
-# `workflow_run` only ever runs the copy of this file on the default branch, so
-# changes here do nothing until they are merged.
+# `workflow_run` only runs the copy of this file on the default branch.
 
 concurrency:
   # `workflow_run.pull_requests` is empty for fork pull requests, so the fork
@@ -54,9 +46,6 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
 
-      # `ci.pull_request.head_sha` is the one claim `workflow_run` can be
-      # checked against; a mismatch means the artifact is not from the commit
-      # that triggered this run.
       - name: Check the report
         run: |
           set -euo pipefail

@@ -9,11 +9,9 @@ on:
 # subsystem a fixed number of times while `hotpath-meta` profiles hotpath's own
 # hot paths.
 #
-# Pushes upload in process with the job's OIDC token. Pull requests cannot: a
-# fork PR gets a read-only token and no `id-token: write` whatever this file
-# asks for, so it writes the report to an artifact and
-# `cloud-meta-benchmark-relay.yml` uploads it from a job that never runs the
-# pull request's code.
+# Pushes upload in process with the job's OIDC token. Fork PRs get no
+# `id-token: write`, so pull requests write the report to an artifact and
+# `cloud-meta-benchmark-relay.yml` uploads it.
 jobs:
   upload:
     name: cloud meta benchmark (push)
@@ -49,22 +47,18 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # Builds and runs the pull request's code, a fork's build scripts and proc
-    # macros included, so it holds nothing worth stealing.
+    # Runs the pull request's code, so it holds nothing worth stealing.
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
         with:
-          # Measure the contributor's commit, not a merge preview: the merge
-          # ref's sha appears in no field of the relay's `workflow_run` payload,
-          # so the relay could not honestly say which commit was measured.
-          # `head_sha` it does have.
+          # The merge ref's sha appears nowhere in the relay's `workflow_run`
+          # payload; `head_sha` does.
           ref: ${{ github.event.pull_request.head.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      # With `hotpath-cloud-meta` compiled in, the JSON report is the upload
-      # payload: complete lists, histograms and provenance, no token needed.
+      # With `hotpath-cloud-meta` the JSON report is the upload payload.
       - name: Run meta benchmark and write report
         env:
           HOTPATH_META_BENCHMARK: meta
