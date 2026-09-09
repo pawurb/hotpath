@@ -4,8 +4,12 @@
 //! between runs and a diff of two reports isolates timing changes. Changing the
 //! constants below invalidates comparability with previously uploaded reports.
 //!
+//! With `hotpath-prometheus` on, the exporter is scraped too, in both the text
+//! and protobuf encodings, so the meta report covers every way a live session
+//! reads data out of the profiler.
+//!
 //! Run with:
-//!   cargo run --release -p test-all-features --example benchmark_meta --features hotpath,hotpath-alloc,hotpath-meta,hotpath-alloc-meta
+//!   cargo run --release -p test-all-features --example benchmark_meta --features hotpath,hotpath-alloc,hotpath-meta,hotpath-alloc-meta,hotpath-prometheus
 
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
@@ -13,20 +17,22 @@ use std::time::Instant;
 
 use futures::StreamExt;
 
-const SYNC_RUNS: u64 = 500_000;
-const ALLOC_RUNS: u64 = 250_000;
-const ASYNC_RUNS: u64 = 150_000;
-const BLOCK_RUNS: u64 = 250_000;
-const FUTURE_RUNS: u64 = 150_000;
-const STREAM_ITEMS: u64 = 500_000;
-const CHANNEL_MSGS: u64 = 150_000;
-const CHANNEL_INSTANCES: u64 = 10_000;
-const LOCK_RUNS: u64 = 250_000;
-const IO_RUNS: u64 = 150_000;
-const DEBUG_RUNS: u64 = 25_000;
+const SYNC_RUNS: u64 = 2_500_000;
+const ALLOC_RUNS: u64 = 1_250_000;
+const ASYNC_RUNS: u64 = 750_000;
+const BLOCK_RUNS: u64 = 1_250_000;
+const FUTURE_RUNS: u64 = 750_000;
+const STREAM_ITEMS: u64 = 2_500_000;
+const CHANNEL_MSGS: u64 = 750_000;
+const CHANNEL_INSTANCES: u64 = 50_000;
+const LOCK_RUNS: u64 = 1_250_000;
+const IO_RUNS: u64 = 750_000;
+const DEBUG_RUNS: u64 = 125_000;
 const THREAD_COUNT: usize = 4;
-const THREAD_RUNS: u64 = 100_000;
-const METRICS_REQUESTS: u64 = 20;
+const THREAD_RUNS: u64 = 500_000;
+const METRICS_REQUESTS: u64 = 120;
+#[cfg(feature = "hotpath-prometheus")]
+const PROMETHEUS_REQUESTS: u64 = 40;
 
 #[hotpath::measure]
 fn sync_noop(v: u64) -> u64 {
@@ -285,9 +291,15 @@ async fn main() {
     // exercises in a live session.
     phase("metrics_server", METRICS_REQUESTS, scrape_metrics);
 
+    // The exporter renders every section from a worker snapshot on each scrape,
+    // and both encodings walk the same data through different serializers.
+    #[cfg(feature = "hotpath-prometheus")]
+    phase("prometheus", PROMETHEUS_REQUESTS, scrape_prometheus);
+
     println!("benchmark_meta: total {:?}", overall.elapsed());
 }
 
+/// Every section the TUI polls, plus the cheap envelopes it polls most often.
 const METRICS_ROUTES: &[&str] = &[
     "/functions_timing",
     "/functions_alloc",
@@ -296,36 +308,112 @@ const METRICS_ROUTES: &[&str] = &[
     "/futures",
     "/rw_locks",
     "/mutexes",
+    "/sql",
+    "/http",
+    "/server",
     "/io",
     "/debug",
     "/threads",
+    "/profiler_status",
+];
+// `/tokio_runtime` is deliberately absent: it needs `--cfg tokio_unstable` and a
+// registered runtime, so here it would only ever measure a 404.
+
+/// Sections whose per-entry logs the TUI fetches when a row is expanded. The
+/// `{id}` is filled from the section listing so the request hits an entry that
+/// exists and serializes its logs, instead of a 404 that measures nothing.
+const LOG_ROUTES: &[(&str, &str)] = &[
+    ("/functions_timing", "/functions_timing/{id}/logs"),
+    ("/functions_alloc", "/functions_alloc/{id}/logs"),
+    ("/channels", "/channels/{id}/logs"),
+    ("/streams", "/streams/{id}/logs"),
+    ("/futures", "/futures/{id}/logs"),
 ];
 
-fn scrape_metrics() {
-    let port: u16 = std::env::var("HOTPATH_METRICS_PORT")
+fn metrics_port() -> u16 {
+    std::env::var("HOTPATH_METRICS_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
-        .unwrap_or(6770);
+        .unwrap_or(6770)
+}
+
+fn scrape_metrics() {
+    let port = metrics_port();
+
+    let mut log_routes = Vec::new();
+    for (section, template) in LOG_ROUTES {
+        match scrape_route(port, section, None) {
+            Ok(body) => {
+                if let Some(id) = first_id(&body) {
+                    log_routes.push(template.replace("{id}", &id.to_string()));
+                }
+            }
+            Err(e) => {
+                eprintln!("benchmark_meta: metrics request {section} failed: {e}");
+                return;
+            }
+        }
+    }
 
     for i in 0..METRICS_REQUESTS {
-        let route = METRICS_ROUTES[i as usize % METRICS_ROUTES.len()];
-        if let Err(e) = scrape_route(port, route) {
+        let i = i as usize;
+        let route = if i % 4 == 3 && !log_routes.is_empty() {
+            log_routes[i % log_routes.len()].as_str()
+        } else {
+            METRICS_ROUTES[i % METRICS_ROUTES.len()]
+        };
+        if let Err(e) = scrape_route(port, route, None) {
             eprintln!("benchmark_meta: metrics request {route} failed: {e}");
             return;
         }
     }
 }
 
-fn scrape_route(port: u16, route: &str) -> std::io::Result<()> {
+/// Both exposition formats: text with classic buckets, and protobuf with native
+/// histograms. They share the snapshot and differ in the serializer.
+#[cfg(feature = "hotpath-prometheus")]
+const PROMETHEUS_ACCEPT: &[&str] = &[
+    "text/plain",
+    "application/vnd.google.protobuf; proto=io.prometheus.client.MetricFamily; encoding=delimited",
+];
+
+#[cfg(feature = "hotpath-prometheus")]
+fn scrape_prometheus() {
+    let port: u16 = std::env::var("HOTPATH_PROMETHEUS_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(6772);
+
+    for i in 0..PROMETHEUS_REQUESTS {
+        let accept = PROMETHEUS_ACCEPT[i as usize % PROMETHEUS_ACCEPT.len()];
+        if let Err(e) = scrape_route(port, "/metrics", Some(accept)) {
+            eprintln!("benchmark_meta: prometheus scrape failed: {e}");
+            return;
+        }
+    }
+}
+
+fn scrape_route(port: u16, route: &str, accept: Option<&str>) -> std::io::Result<String> {
     let mut stream = std::net::TcpStream::connect(("127.0.0.1", port))?;
-    write!(
-        stream,
-        "GET {route} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
-    )?;
+    write!(stream, "GET {route} HTTP/1.1\r\nHost: 127.0.0.1\r\n")?;
+    if let Some(accept) = accept {
+        write!(stream, "Accept: {accept}\r\n")?;
+    }
+    write!(stream, "Connection: close\r\n\r\n")?;
     stream.flush()?;
     let mut body = Vec::new();
     stream.read_to_end(&mut body)?;
-    Ok(())
+    Ok(String::from_utf8_lossy(&body).into_owned())
+}
+
+/// First `"id"` in a metrics response, used to build the log routes above.
+fn first_id(body: &str) -> Option<u32> {
+    let start = body.find("\"id\":")? + 5;
+    let digits = &body[start..];
+    let end = digits
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(digits.len());
+    digits[..end].parse().ok()
 }
 
 fn phase(name: &str, ops: u64, body: impl FnOnce()) {
