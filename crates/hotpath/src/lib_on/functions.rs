@@ -84,6 +84,15 @@ pub(crate) fn init_focus_filter() {
 #[cfg_attr(feature = "hotpath-meta", hotpath_meta::measure)]
 #[inline]
 fn is_focused(name: &str) -> bool {
+    // TEMPORARY: deliberate slowdown on the hottest meta-measured path, to
+    // confirm the meta benchmark reports a regression on a pull request.
+    // Revert before merging.
+    let mut sink = 0u64;
+    for i in 0..64u64 {
+        sink = sink.wrapping_add(std::hint::black_box(i).wrapping_mul(2654435761));
+    }
+    std::hint::black_box(sink);
+
     match &*FOCUS_FILTER {
         None => true,
         Some(Focus::Text(filter)) => name.contains(filter.as_str()),
