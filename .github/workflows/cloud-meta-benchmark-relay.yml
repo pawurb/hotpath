@@ -7,9 +7,14 @@ on:
 
 # This repo is the first consumer of its own relay: `hotpath-relay.yml` is the
 # reusable workflow adopters call, and everything the upload needs lives there.
+# Referenced by full path rather than `./` so this call resolves exactly the way
+# an adopter's does. `@main` rather than a release tag because we want the relay
+# under test to be the one on the default branch; adopters pin a tag instead.
+# `workflow_run` runs the default branch copy of this file either way, so this
+# changes nothing about which version executes.
 jobs:
   relay:
-    uses: ./.github/workflows/hotpath-relay.yml
+    uses: pawurb/hotpath-rs/.github/workflows/hotpath-relay.yml@main
     permissions:
       actions: read
       contents: read
