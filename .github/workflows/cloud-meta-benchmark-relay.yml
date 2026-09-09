@@ -5,76 +5,22 @@ on:
     workflows: ["Cloud meta benchmark"]
     types: [completed]
 
-# Uploads the report a pull request job produced. That job runs the pull
-# request's code and gets no OIDC token; this one holds the token and never
-# checks out or executes anything from the pull request.
-#
-# The pull request context in the artifact is trusted: lying there only
-# distorts the pull request's own comment. Two fields could affect other
-# reports and are enforced: `ci.event` must be `pull_request` (a `push` on
-# `main` would become everyone's baseline) and `meta.benchmark` is pinned (the
-# server prefers it over the `?benchmark=` query).
-#
-# `workflow_run` only runs the copy of this file on the default branch.
-
-concurrency:
-  # `workflow_run.pull_requests` is empty for fork pull requests, so the fork
-  # branch identifies the run instead of the pull request number.
-  group: meta-relay-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: true
-
+# This repo is the first consumer of its own relay: `hotpath-relay.yml` is the
+# reusable workflow adopters call, and everything the upload needs lives there.
+# Referenced by full path rather than `./` so this call resolves exactly the way
+# an adopter's does. `@main` rather than a release tag because we want the relay
+# under test to be the one on the default branch; adopters pin a released tag
+# once one contains this workflow.
+# `workflow_run` runs the default branch copy of this file either way, so this
+# changes nothing about which version executes.
 jobs:
   relay:
-    name: relay meta benchmark
-    if: >-
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    uses: pawurb/hotpath-rs/.github/workflows/hotpath-relay.yml@main
     permissions:
-      actions: read # download the artifact from the benchmark run
+      actions: read
       contents: read
-      id-token: write # mint the token hotpath.rs authenticates
-    env:
-      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-    steps:
-      - name: Download the report
-        uses: actions/download-artifact@v4
-        with:
-          name: meta-report
-          path: artifact
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ github.token }}
-
-      - name: Check the report
-        run: |
-          set -euo pipefail
-          size=$(stat -c %s artifact/meta-report.json)
-          if [ "$size" -gt 5000000 ]; then
-            echo "::error::report is $size bytes, over the server's 5 MiB limit"
-            exit 1
-          fi
-          jq -e --arg sha "$HEAD_SHA" \
-            '.meta.ci.event == "pull_request" and .meta.ci.pull_request.head_sha == $sha' \
-            artifact/meta-report.json > /dev/null
-
-          jq '.meta.benchmark = "meta" | .meta.source_root = ""' \
-            artifact/meta-report.json > upload.json
-
-      - name: Upload to hotpath.rs
-        run: |
-          set -euo pipefail
-          # `ACTIONS_ID_TOKEN_REQUEST_URL` always carries an `api-version`
-          # query, so the audience is appended with `&`.
-          token=$(curl -sS --fail \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=hotpath.rs" | jq -r .value)
-          curl -sS --fail-with-body -X POST \
-            "https://hotpath.rs/api/v1/reports?benchmark=meta" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            --data-binary @upload.json > response.json
-          {
-            echo "## hotpath.rs meta benchmark"
-            echo '```'; jq . response.json; echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+      id-token: write
+    with:
+      benchmark: meta
+      artifact_name: meta-report
+      report_file: meta-report.json

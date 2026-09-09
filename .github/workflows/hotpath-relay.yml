@@ -1,0 +1,165 @@
+name: hotpath relay
+
+# Uploads a hotpath report that a pull request job produced. That job builds and
+# runs the pull request's code, so on a fork it gets a read-only token and no
+# `id-token: write` whatever its workflow asks for, and the in-process uploader
+# has nothing to authenticate with. It writes the JSON report to an artifact
+# instead, and this workflow posts it from a job that never checks out or
+# executes anything from the pull request.
+#
+# The pull request context in the artifact is trusted: lying there only distorts
+# the pull request's own comment. Two fields could affect other reports and are
+# enforced here: `ci.event` must be `pull_request` (a `push` on the default
+# branch would become everyone's baseline) and `meta.benchmark` is pinned (the
+# server prefers it over the `?benchmark=` query).
+#
+# Call it from a workflow of your own:
+#
+#   name: hotpath relay
+#   on:
+#     workflow_run:
+#       workflows: ["<name of your benchmark workflow>"]
+#       types: [completed]
+#   jobs:
+#     relay:
+#       uses: pawurb/hotpath-rs/.github/workflows/hotpath-relay.yml@main
+#       permissions:
+#         actions: read
+#         contents: read
+#         id-token: write
+#       with:
+#         benchmark: my_benchmark
+#         artifact_name: hotpath-report
+#         report_file: report.json
+#
+# The benchmark job it pairs with checks out `github.event.pull_request.head.sha`
+# (not the default merge ref, whose commit this workflow cannot vouch for), runs
+# the benchmark **with the `hotpath-cloud` feature** and with
+# `HOTPATH_OUTPUT_FORMAT=json` plus `HOTPATH_OUTPUT_PATH=<report_file>`, and
+# uploads that file as `<artifact_name>`. The feature is what makes a JSON report
+# an upload payload: without it `meta.git`, `meta.ci` and `meta.benchmark` are
+# absent and the report carries neither provenance nor histograms, so the check
+# below rejects it. No `HOTPATH_UPLOAD` is needed or wanted - that job has no
+# token to upload with, which is the reason this workflow exists.
+#
+# `workflow_run` only ever runs the copy of the calling workflow that is on the
+# default branch, so changes to it do nothing until they are merged. The
+# `workflows:` list matches by workflow *name*: rename the benchmark workflow and
+# the relay silently stops firing.
+
+on:
+  workflow_call:
+    inputs:
+      benchmark:
+        description: Benchmark series to upload to, 1-64 chars from [A-Za-z0-9._-].
+        required: true
+        type: string
+      artifact_name:
+        description: Name of the artifact the benchmark job uploaded.
+        default: hotpath-report
+        type: string
+      report_file:
+        description: Name of the JSON report inside that artifact.
+        default: report.json
+        type: string
+      source_root:
+        description: >-
+          Build workspace root relative to the repository root, "" when they are
+          the same. Prefixes relative paths in source links.
+        default: ""
+        type: string
+      upload_url:
+        description: Base URL of the hotpath server.
+        default: https://hotpath.rs
+        type: string
+
+jobs:
+  relay:
+    name: relay ${{ inputs.benchmark }} benchmark
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The caller must grant these; a called workflow cannot raise them.
+    permissions:
+      actions: read # download the artifact from the benchmark run
+      contents: read
+      id-token: write # mint the token the server authenticates
+    concurrency:
+      # `workflow_run.pull_requests` is empty for fork pull requests, so the fork
+      # branch identifies the run instead of the pull request number.
+      group: hotpath-relay-${{ inputs.benchmark }}-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
+    env:
+      # Inputs reach the scripts through the environment, never interpolated
+      # into the script text.
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      BENCHMARK: ${{ inputs.benchmark }}
+      REPORT_PATH: artifact/${{ inputs.report_file }}
+      SOURCE_ROOT: ${{ inputs.source_root }}
+      UPLOAD_URL: ${{ inputs.upload_url }}
+    steps:
+      # Fails here rather than as a 400 from the server, which applies the same
+      # rule and would reject the upload after the run had already been paid for.
+      - name: Check the benchmark name
+        run: |
+          set -euo pipefail
+          case "$BENCHMARK" in
+            "" | "." | "..") ;;
+            *[!A-Za-z0-9._-]*) ;;
+            *)
+              if [ "${#BENCHMARK}" -le 64 ]; then
+                exit 0
+              fi
+              ;;
+          esac
+          echo "::error::invalid benchmark name '$BENCHMARK': use 1-64 chars from [A-Za-z0-9._-], not \".\" or \"..\""
+          exit 1
+
+      # If this cannot find the artifact, the usual cause is a renamed benchmark
+      # workflow or a mismatched artifact_name.
+      - name: Download the report
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Check the report
+        run: |
+          set -euo pipefail
+          size=$(stat -c %s "$REPORT_PATH")
+          if [ "$size" -gt 5000000 ]; then
+            echo "::error::report is $size bytes, over the server's 5 MiB limit"
+            exit 1
+          fi
+          if ! jq -e --arg sha "$HEAD_SHA" \
+            '.meta.ci.event == "pull_request" and .meta.ci.pull_request.head_sha == $sha' \
+            "$REPORT_PATH" > /dev/null; then
+            echo "::error::report does not describe this pull request: meta.ci.event must be \"pull_request\" and meta.ci.pull_request.head_sha must be $HEAD_SHA. A report built without the hotpath-cloud feature has no meta.ci at all."
+            exit 1
+          fi
+
+          jq --arg benchmark "$BENCHMARK" --arg source_root "$SOURCE_ROOT" \
+            '.meta.benchmark = $benchmark | .meta.source_root = $source_root' \
+            "$REPORT_PATH" > upload.json
+
+      - name: Upload the report
+        run: |
+          set -euo pipefail
+          # `ACTIONS_ID_TOKEN_REQUEST_URL` always carries an `api-version`
+          # query, so the audience is appended with `&`.
+          token=$(curl -sS --fail \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=hotpath.rs" | jq -r .value)
+          curl -sS --fail-with-body -X POST \
+            "$UPLOAD_URL/api/v1/reports?benchmark=$BENCHMARK" \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            --data-binary @upload.json > response.json
+          {
+            echo "## hotpath.rs $BENCHMARK benchmark"
+            echo '```'; jq . response.json; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
