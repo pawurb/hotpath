@@ -34,8 +34,13 @@ name: hotpath relay
 #
 # The benchmark job it pairs with checks out `github.event.pull_request.head.sha`
 # (not the default merge ref, whose commit this workflow cannot vouch for), runs
-# with `HOTPATH_OUTPUT_FORMAT=json` and `HOTPATH_OUTPUT_PATH=<report_file>`, and
-# uploads that file as `<artifact_name>`.
+# the benchmark **with the `hotpath-cloud` feature** and with
+# `HOTPATH_OUTPUT_FORMAT=json` plus `HOTPATH_OUTPUT_PATH=<report_file>`, and
+# uploads that file as `<artifact_name>`. The feature is what makes a JSON report
+# an upload payload: without it `meta.git`, `meta.ci` and `meta.benchmark` are
+# absent and the report carries neither provenance nor histograms, so the check
+# below rejects it. No `HOTPATH_UPLOAD` is needed or wanted - that job has no
+# token to upload with, which is the reason this workflow exists.
 #
 # `workflow_run` only ever runs the copy of the calling workflow that is on the
 # default branch, so changes to it do nothing until they are merged. The
@@ -130,9 +135,12 @@ jobs:
             echo "::error::report is $size bytes, over the server's 5 MiB limit"
             exit 1
           fi
-          jq -e --arg sha "$HEAD_SHA" \
+          if ! jq -e --arg sha "$HEAD_SHA" \
             '.meta.ci.event == "pull_request" and .meta.ci.pull_request.head_sha == $sha' \
-            "$REPORT_PATH" > /dev/null
+            "$REPORT_PATH" > /dev/null; then
+            echo "::error::report does not describe this pull request: meta.ci.event must be \"pull_request\" and meta.ci.pull_request.head_sha must be $HEAD_SHA. A report built without the hotpath-cloud feature has no meta.ci at all."
+            exit 1
+          fi
 
           jq --arg benchmark "$BENCHMARK" --arg source_root "$SOURCE_ROOT" \
             '.meta.benchmark = $benchmark | .meta.source_root = $source_root' \
