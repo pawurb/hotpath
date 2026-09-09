@@ -75,8 +75,11 @@ jobs:
       # decides where the report lands is replaced with this job's own context.
       # Left alone, a fork could claim `event: push` on `refs/heads/main` and
       # become the baseline every later pull request is compared against, or
-      # aim the comment at somebody else's pull request. Only the measurements
-      # survive: lying in those distorts nothing but its own comment.
+      # aim the comment at somebody else's pull request. `meta.benchmark` is
+      # pinned too: the server prefers it over the `?benchmark=` query, so a
+      # forged value would file the report under another series. Only the
+      # measurements survive: lying in those distorts nothing but its own
+      # comment.
       - name: Rewrite the run context
         if: steps.pr.outputs.found == 'true'
         env:
@@ -131,6 +134,7 @@ jobs:
              | .meta.git.base_sha = $base_sha
              | .meta.git.repository = $repository
              | .meta.source_root = ""
+             | .meta.benchmark = "meta"
              | .meta.ci = $ci' \
             artifact/meta-report.json > upload.json
 
