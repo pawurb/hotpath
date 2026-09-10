@@ -106,9 +106,7 @@ impl<T> Sender<T> {
         self.inner().poll_canceled(cx)
     }
 
-    /// Resolves when the corresponding [`Receiver`] has been dropped. Returns an
-    /// opaque future rather than [`futures_channel::oneshot::Cancellation`], which
-    /// would expose the internal payload type.
+    /// Opaque future instead of `oneshot::Cancellation`, which would expose the payload type.
     pub fn cancellation(&mut self) -> impl Future<Output = ()> + '_ {
         std::future::poll_fn(move |cx| self.poll_canceled(cx))
     }
@@ -203,8 +201,7 @@ impl<T> Drop for Receiver<T> {
         // `close()` first so a send racing this drop fails; `try_recv` then
         // tells whether a value was already in flight.
         self.inner.close();
-        let pending = matches!(self.inner.try_recv(), Ok(Some(_)));
-        if pending {
+        if matches!(self.inner.try_recv(), Ok(Some(_))) {
             // The sender emitted no `Closed` after delivering, so this teardown
             // must, then retire the value nobody will take.
             self.closed.store(true, Ordering::Release);
