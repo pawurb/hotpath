@@ -25,7 +25,7 @@ async fn main() {
 
 ### Wrapped channel types
 
-By default `channel!` does not return the endpoints you passed in - it returns *instrumented wrappers* around them. The macro expands to a different type than the original:
+`channel!` does not return the endpoints you passed in - it returns *instrumented wrappers* around them. The macro expands to a different type than the original:
 
 ```rust
 // before: a plain crossbeam receiver
@@ -36,7 +36,7 @@ let (tx, rx): (crossbeam_channel::Sender<i32>, crossbeam_channel::Receiver<i32>)
 let (tx, rx) = hotpath::channel!(crossbeam_channel::unbounded::<i32>());
 ```
 
-At a `let` binding this is invisible - type inference picks up whatever the macro returns. It only matters when you need to *name* the type, for example a struct field or a function signature. There you cannot write `crossbeam_channel::Sender<T>`, because the value is a wrapper, not a `crossbeam_channel::Sender`. (If you would rather keep the original endpoint types, use the legacy [`proxy = true`](#legacy-proxy--true-mode), which is type-transparent.)
+At a `let` binding this is invisible - type inference picks up whatever the macro returns. It only matters when you need to *name* the type, for example a struct field or a function signature. There you cannot write `crossbeam_channel::Sender<T>`, because the value is a wrapper, not a `crossbeam_channel::Sender`.
 
 Use the `hotpath::wrap::` path instead. It mirrors the original module layout, so you prefix the original path with `hotpath::wrap::`:
 
@@ -158,24 +158,11 @@ let (tx, rx) = hotpath::channel!(mpsc::sync_channel::<String>(100), capacity = 1
 let (tx, rx) = hotpath::channel!(futures_channel::mpsc::channel::<String>(100), capacity = 100);
 ```
 
-Wrap mode rebuilds the inner channel from `capacity` (neither library exposes a way to read it back from the endpoints) and discards the channel you constructed. If the two disagree - e.g. `sync_channel(100)` with `capacity = 1` - the profiled build gets a different bound than the unprofiled one (where `channel!` returns your original channel untouched), which can change backpressure or even deadlock only when profiling is enabled. Keep the numbers equal.
+The wrapper rebuilds the inner channel from `capacity` (neither library exposes a way to read it back from the endpoints) and discards the channel you constructed. If the two disagree - e.g. `sync_channel(100)` with `capacity = 1` - the profiled build gets a different bound than the unprofiled one (where `channel!` returns your original channel untouched), which can change backpressure or even deadlock only when profiling is enabled. Keep the numbers equal.
 
 Tokio, crossbeam, flume, and async-channel recover the bound from the endpoint, so they need no `capacity` argument.
 
 `futures_channel::mpsc` has one more wrinkle: its `TrySendError` has no public constructor, so `try_send` / `unbounded_send` on the wrappers return `hotpath::wrap::futures_channel::mpsc::TrySendError`, a stand-in with the same methods (`is_full`, `is_disconnected`, `into_inner`, `into_send_error`). `Sink` errors are the plain futures `SendError`.
-
-### Legacy `proxy = true` mode
-
-Passing `proxy = true` selects the legacy proxy forwarder-based instrumentation mode. Instead of wrapping the endpoints, `hotpath` spawns a background task/thread that relays every message through a second internal channel and observes sent/received counts at that boundary:
-
-```rust
-// keep the raw endpoint types; instrument via a forwarder
-let (tx, rx) = hotpath::channel!(mpsc::channel::<String>(100), proxy = true);
-```
-
-Its only advantage is that it returns the original endpoint types unchanged (see [Wrapped types](#wrapped-types)).
-
-The trade-offs are significant. It **cannot measure send-receive latency accurately**: events are stamped inside the forwarder, in the middle of the pipeline, so `proc_avg`/percentiles and exact queue depth are omitted. Relaying every message through an extra channel and task also costs more - for some channel libraries up to **6x higher overhead** than the default wrap mode. Sent/received counts are observed at the proxy boundary rather than at the final consumer, and `try_send` may behave slightly differently since the proxy adds one slot of extra capacity. Prefer the default wrap mode unless you need the original endpoint types.
 
 ## Streams monitoring
 

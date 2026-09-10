@@ -1,10 +1,7 @@
 //! Endpoint-wrapping `futures_channel::oneshot` instrumentation for the `channel!` macro.
 //!
-//! Wraps the `Sender`/`Receiver` endpoints directly, unlike the forwarder-proxy in
-//! [`crate::channels::wrapper::ftc`], which spawns a background task that relays the
-//! value through a second oneshot. Wrap mode removes the task and the second channel, so
-//! `send` and the receive future hit the real channel and the only added cost is a
-//! non-blocking event emit.
+//! Wraps the `Sender`/`Receiver` endpoints directly: `send` and the receive future hit
+//! the real channel and the only added cost is a non-blocking event emit.
 //!
 //! The inner channel carries `(msg_id, send_ts, T)`. A oneshot moves exactly one value, so
 //! `msg_id` is drawn once per instance from the call site's shared sequence (aggregated
@@ -35,7 +32,7 @@ use futures_channel::oneshot::Canceled;
 use futures_core::future::FusedFuture;
 
 use crate::channels::{
-    register_channel_wrap, send_channel_event, ChannelEvent, ChannelType, Instant,
+    register_channel, send_channel_event, ChannelEvent, ChannelType, Instant,
     InstrumentChannelWrap, InstrumentChannelWrapLog,
 };
 
@@ -241,9 +238,9 @@ fn build<T>(
     log_fn: Option<fn(&T) -> String>,
     iter: bool,
 ) -> (Sender<T>, Receiver<T>) {
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Oneshot, iter);
+    let id = register_channel::<T>(source, label, ChannelType::Oneshot, iter);
     // Rebuild to carry `(msg_id, send_ts, T)`; the caller's channel is discarded
-    // (wrap mode is inline-only).
+    // (the wrapper is inline-only).
     let (tx, rx) = oneshot::channel::<Payload<T>>();
     let closed = Arc::new(AtomicBool::new(false));
     // Aggregated instances share one msg-id sequence so ids stay unique

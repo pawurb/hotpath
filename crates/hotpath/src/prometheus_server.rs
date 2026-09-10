@@ -981,7 +981,6 @@ fn collect_channels(families: &mut Vec<Family>) {
 
     let proc: Vec<Sample> = entries
         .iter()
-        .filter(|e| e.has_proc_hist())
         .map(|e| Sample {
             labels: labels(e),
             value: SampleValue::Histogram(HistogramValue {
@@ -999,7 +998,7 @@ fn collect_channels(families: &mut Vec<Family>) {
     if !proc.is_empty() {
         families.push(Family {
             name: "hotpath_channel_proc_seconds",
-            help: "Delay between send and sampled receive of a message (wrap mode only).",
+            help: "Delay between send and sampled receive of a message.",
             kind: FamilyKind::Histogram,
             samples: proc,
         });

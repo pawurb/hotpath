@@ -34,8 +34,7 @@ Two design choices keep the hot path cheap:
 | Functions | `#[hotpath::measure]` | ~40 ns per call |
 | Mutexes | `mutex!` | 29-54 ns per lock cycle |
 | RwLocks | `rw_lock!` | 34-66 ns per acquisition |
-| Channels (default wrap mode) | `channel!` | 47-88 ns per send/recv cycle |
-| Channels (legacy proxy mode) | `channel!(..., proxy = true)` | 3.5-11 µs per send/recv cycle |
+| Channels | `channel!` | 47-88 ns per send/recv cycle |
 | Futures | `future!` | ~125 ns per poll |
 | Streams | `stream!` | ~30 ns per item |
 
@@ -62,18 +61,16 @@ Each cycle records two measurements (wait time and hold time), so this is roughl
 
 ### Channels
 
-The default [wrap mode](./data_flow.md) intercepts `send`/`recv` inline and adds **47-88 ns per send/recv cycle**:
+The [channel wrappers](./data_flow.md) intercept `send`/`recv` inline and add **47-88 ns per send/recv cycle**:
 
-| Channel | Wrap mode | Legacy proxy mode |
-|---|---|---|
-| `crossbeam_channel` | +47 ns | +67 ns |
-| `std::sync::mpsc` | +58 ns | +3.5 µs |
-| `async_channel` | +63 ns | +6.4 µs |
-| `flume` | +86 ns | +6.6 µs |
-| `tokio::sync::mpsc` | +88 ns | +5.8 µs |
-| `futures_channel::mpsc` | +52 ns | +10.4 µs |
-
-The legacy [`proxy = true` mode](./data_flow.md#legacy-proxy--true-mode) relays every message through an extra channel and a forwarder task, which multiplies the per-message cost of most backends by ~4-11x (crossbeam is the outlier where the forwarder happens to be nearly free). Prefer the default wrap mode unless you need the original endpoint types.
+| Channel | Overhead |
+|---|---|
+| `crossbeam_channel` | +47 ns |
+| `futures_channel::mpsc` | +52 ns |
+| `std::sync::mpsc` | +58 ns |
+| `async_channel` | +63 ns |
+| `flume` | +86 ns |
+| `tokio::sync::mpsc` | +88 ns |
 
 ### Futures and streams
 

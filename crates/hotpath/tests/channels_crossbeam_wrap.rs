@@ -41,7 +41,7 @@ pub mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         // The example emits a JSON report; assert the endpoint wrapper reported the
-        // exact queue depth (50 messages parked, none received). A proxy wrapper
+        // exact queue depth (50 messages parked, none received). A forwarder
         // drains immediately and would report ~0 here.
         let channels = parse_channels(&stdout);
 
@@ -50,8 +50,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-queue")
             .expect("wrap-queue channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 50, "expected 50 sends");
         assert_eq!(
             entry.received_count, 0,
@@ -101,8 +99,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "recv-dropped")
             .expect("recv-dropped channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(
             entry.state.as_deref(),
             Some("closed"),
@@ -145,8 +141,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "recv-clone-dropped")
             .expect("recv-clone-dropped channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(
             entry.state.as_deref(),
             Some("closed"),
@@ -188,8 +182,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-latency")
             .expect("wrap-latency channel not found");
-
-        assert!(wrap.wrap, "channel should be endpoint-wrapped");
         let proc_avg = wrap
             .proc_avg
             .as_deref()
@@ -208,24 +200,6 @@ pub mod tests {
             wrap.proc_percentiles.contains_key("p95"),
             "expected p95 latency percentile in JSON, got {:?}",
             wrap.proc_percentiles
-        );
-
-        // Proxy (non-wrap) channels cannot measure latency accurately, so the
-        // histogram fields are omitted rather than reported as zero.
-        let proxy = channels
-            .data
-            .iter()
-            .find(|c| c.label == "proxy-latency")
-            .expect("proxy-latency channel not found");
-
-        assert!(!proxy.wrap, "channel should be a proxy channel");
-        assert!(
-            proxy.proc_avg.is_none(),
-            "proxy channel must not report proc_avg"
-        );
-        assert!(
-            proxy.proc_percentiles.is_empty(),
-            "proxy channel must not report latency percentiles"
         );
     }
 }

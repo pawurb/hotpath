@@ -40,7 +40,7 @@ pub mod tests {
     }
 
     // The self-tracked queue counter reports the exact depth (50 messages parked,
-    // none received), where a forwarder proxy would drain immediately and report ~0.
+    // none received), where a forwarder would drain immediately and report ~0.
     // Tokio recovers bounded capacity from `max_capacity()`, so no `capacity` arg.
     //
     // cargo run -p test-channels-tokio --example wrap_tokio --features hotpath
@@ -54,8 +54,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-queue")
             .expect("wrap-queue channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 50, "expected 50 sends");
         assert_eq!(
             entry.received_count, 0,
@@ -87,8 +85,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-unbounded")
             .expect("wrap-unbounded channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 200, "expected 200 sends");
         assert_eq!(entry.received_count, 200, "expected 200 receives");
         assert_eq!(entry.queue_size, Some(0), "expected drained queue");
@@ -117,8 +113,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-concurrent")
             .expect("wrap-concurrent channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert!(
             entry.received_count <= entry.sent_count,
             "received ({}) must not exceed sent ({})",
@@ -146,8 +140,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "recv-dropped")
             .expect("recv-dropped channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(
             entry.state.as_deref(),
             Some("closed"),
@@ -173,8 +165,6 @@ pub mod tests {
                 .iter()
                 .find(|c| c.label == label)
                 .unwrap_or_else(|| panic!("{label} channel not found"));
-
-            assert!(entry.wrap, "channel should be endpoint-wrapped");
             assert_eq!(entry.sent_count, 2, "expected 2 sends on {label}");
             assert_eq!(entry.received_count, 2, "expected 2 receives on {label}");
             assert_eq!(
@@ -200,8 +190,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-recv-many")
             .expect("wrap-recv-many channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 60, "expected 60 sends");
         assert_eq!(entry.received_count, 60, "expected 60 receives");
         assert_eq!(entry.queue_size, Some(0), "expected drained queue");
@@ -234,8 +222,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-blocking")
             .expect("wrap-blocking channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 25, "expected 25 sends");
         assert_eq!(entry.received_count, 25, "expected 25 receives");
         assert_eq!(entry.queue_size, Some(0), "expected drained queue");
@@ -255,8 +241,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-send-timeout")
             .expect("wrap-send-timeout channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 5, "timed-out send must not be counted");
         assert_eq!(
             entry.queue_size,
@@ -284,8 +268,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-poll-recv")
             .expect("wrap-poll-recv channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 30, "expected 30 sends");
         assert_eq!(entry.received_count, 30, "expected 30 receives");
         assert_eq!(entry.queue_size, Some(0), "expected drained queue");

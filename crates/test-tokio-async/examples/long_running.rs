@@ -403,13 +403,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         label = "fast_metrics",
         log = true
     );
-    // `proxy = true`: this consumer uses `blocking_recv`, which the wrap receiver
-    // doesn't expose. Forwarder mode keeps the raw tokio `Receiver`.
-    let (slow_tx, slow_rx) = hotpath::channel!(
-        mpsc::channel::<String>(50),
-        proxy = true,
-        label = "slow_events"
-    );
+    let (slow_tx, slow_rx) = hotpath::channel!(mpsc::channel::<String>(50), label = "slow_events");
 
     let mut fast_rx = fast_rx;
     let mut slow_rx = slow_rx;

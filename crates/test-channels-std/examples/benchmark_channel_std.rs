@@ -4,10 +4,10 @@
 use std::time::{Duration, Instant};
 
 // Single-threaded stress test comparing channel instrumentation overhead in one run: an
-// uninstrumented baseline (raw channel, no macro), the `proxy = true` forwarder, and the
-// default wrap mode. Each is hammered in a tight uncontended send/recv loop, so the delta
-// vs baseline isolates per-send/recv instrumentation cost. Run with `--features hotpath`
-// (without it every mode is the raw channel). Iteration count via `HOTPATH_BENCH_RUNS`.
+// uninstrumented baseline (raw channel, no macro) and the instrumented channel. Each is
+// hammered in a tight uncontended send/recv loop, so the delta vs baseline isolates
+// per-send/recv instrumentation cost. Run with `--features hotpath` (without it both
+// modes are the raw channel). Iteration count via `HOTPATH_BENCH_RUNS`.
 fn main() {
     let _guard = hotpath::HotpathGuardBuilder::new("main")
         .sections(vec![hotpath::Section::Channels])
@@ -29,11 +29,6 @@ fn main() {
     }
 
     let baseline = phase!(std::sync::mpsc::channel::<u64>());
-    let proxy = phase!(hotpath::channel!(
-        std::sync::mpsc::channel::<u64>(),
-        proxy = true,
-        label = "proxy"
-    ));
     let wrap = phase!(hotpath::channel!(
         std::sync::mpsc::channel::<u64>(),
         label = "wrap"
@@ -42,11 +37,7 @@ fn main() {
     report(
         "std",
         runs,
-        &[
-            ("baseline (raw)", baseline),
-            ("wrap (default)", wrap),
-            ("proxy = true", proxy),
-        ],
+        &[("baseline (raw)", baseline), ("instrumented", wrap)],
     );
 }
 

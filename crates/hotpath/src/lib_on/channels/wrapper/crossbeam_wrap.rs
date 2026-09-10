@@ -1,8 +1,7 @@
 //! Endpoint-wrapping crossbeam channel instrumentation for the `channel!` macro.
 //!
-//! Wraps the `Sender`/`Receiver` endpoints directly (unlike the forwarder-proxy in
-//! [`crate::channels::wrapper::crossbeam`]): no extra thread or proxy channel, so
-//! send/recv hit the real channel. `queue_len` is a snapshot taken right after each
+//! Wraps the `Sender`/`Receiver` endpoints directly, so send/recv hit the real channel.
+//! `queue_len` is a snapshot taken right after each
 //! op - exact single-threaded, may skew under concurrent endpoints.
 //!
 //! The inner channel carries `(msg_id, send_ts, T)`. Monotonic `msg_id` pairs a send
@@ -27,7 +26,7 @@ use crossbeam_channel::{
 };
 
 use crate::channels::{
-    register_channel_wrap, send_channel_event, ChannelEvent, ChannelType, Instant,
+    register_channel, send_channel_event, ChannelEvent, ChannelType, Instant,
     InstrumentChannelWrap, InstrumentChannelWrapLog,
 };
 
@@ -333,7 +332,7 @@ fn build<T>(
 ) -> (Sender<T>, Receiver<T>) {
     let (orig_tx, _orig_rx) = inner;
     let ch_type = channel_type(&orig_tx);
-    let id = register_channel_wrap::<T>(source, label, ch_type, iter);
+    let id = register_channel::<T>(source, label, ch_type, iter);
     let closed = Arc::new(AtomicBool::new(false));
     // Aggregated instances share one msg-id sequence so ids stay unique
     // within the entry; iter-mode instances keep a local counter.
@@ -344,7 +343,7 @@ fn build<T>(
     };
 
     // Rebuild the inner channel to carry `(msg_id, send_ts, T)`. The caller's original
-    // channel is discarded (wrap mode is inline-only, see module docs); only its
+    // channel is discarded (the wrapper is inline-only, see module docs); only its
     // kind/capacity is copied.
     let (tx, rx) = match ch_type {
         ChannelType::Bounded(cap) => crossbeam_channel::bounded::<(u64, Option<Instant>, T)>(cap),

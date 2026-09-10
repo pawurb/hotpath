@@ -135,7 +135,7 @@ pub(crate) fn render_channels_panel(
         .map(|entry| {
             let capacity = channel_capacity(&entry.channel_type);
             let type_text = format!("Channel[{capacity}]");
-            // Queue depth is only tracked for wrap channels; proxy channels show `-`.
+            // `-` until the first message event.
             let queue_text = match (entry.queue_size, entry.max_queue_size) {
                 (Some(queue), Some(max)) => format!("{queue}/{max}/{capacity}"),
                 _ => "-".to_string(),
@@ -145,7 +145,6 @@ pub(crate) fn render_channels_panel(
                 hotpath::format_rate(entry.sent_per_sec),
                 hotpath::format_rate(entry.received_per_sec)
             );
-            // Latency is only measured for wrap channels; proxy channels show `-`.
             let mut cells = vec![
                 Cell::from(type_text).style(Style::default().fg(Color::Cyan)),
                 Cell::from(truncate_left(&entry.label, label_width)),
