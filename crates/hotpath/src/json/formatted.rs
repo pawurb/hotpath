@@ -352,7 +352,6 @@ pub struct JsonChannelEntry {
     pub received_per_sec: Option<f64>,
     pub type_name: String,
     pub type_size: usize,
-    pub wrap: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_size: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -775,10 +774,9 @@ fn format_sent_log_entry(
     current_elapsed_ns: u64,
     received_logs: &[DataFlowLogEntry],
 ) -> JsonChannelSentLog {
-    // Pair by message identity (wrap mode only). Proxy channels have no `msg_id`
-    // and their forwarder-stamped timestamps aren't true latency, so their delay
-    // is always "N/A". A received message without `delay_nanos` was skipped by
-    // time sampling.
+    // Pair by message identity. Entries without `msg_id` (streams) have no
+    // pairing, so their delay is always "N/A". A received message without
+    // `delay_nanos` was skipped by time sampling.
     let delay = match entry.msg_id {
         Some(sent_id) => received_logs
             .iter()
@@ -1413,11 +1411,9 @@ mod parse_tests {
         assert_eq!(by_index[&2], Some("3 ns".to_string()));
     }
 
-    /// Proxy channels (no `msg_id`) always show "N/A": their events are stamped
-    /// inside the forwarder thread, so the interval would be a misleading
-    /// forwarder-hop time rather than true send->receive latency.
+    /// Entries without `msg_id` cannot be paired, so the delay reads "N/A".
     #[test]
-    fn delay_is_na_for_proxy_channels_without_msg_id() {
+    fn delay_is_na_without_msg_id() {
         let logs = ChannelLogs {
             id: 1,
             sent_logs: vec![DataFlowLogEntry::new(1, 10, None, None, None, None)],
@@ -1428,7 +1424,7 @@ mod parse_tests {
         assert_eq!(out.sent_logs[0].delay, Some("N/A".to_string()));
     }
 
-    /// Unsampled wrap messages carry no `delay_nanos`, so the delay must read
+    /// Unsampled messages carry no `delay_nanos`, so the delay must read
     /// "N/A", not a bogus near-zero derived from drain-time stamps.
     #[test]
     fn delay_is_na_for_unsampled_wrap_messages() {

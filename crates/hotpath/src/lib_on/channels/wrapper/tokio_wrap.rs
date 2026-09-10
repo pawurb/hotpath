@@ -1,10 +1,6 @@
 //! Endpoint-wrapping Tokio `mpsc` channel instrumentation for the `channel!` macro.
 //!
-//! Wraps the `Sender`/`Receiver` endpoints directly, unlike the forwarder-proxy in
-//! [`crate::channels::wrapper::tokio`], which spawns a background task that relays every
-//! message through a second channel. That forwarder costs a scheduler round-trip per
-//! message (the message is not visible to `recv` until the relay task is polled); wrap
-//! mode removes the task and the second channel, so send/recv hit the real channel and
+//! Wraps the `Sender`/`Receiver` endpoints directly: send/recv hit the real channel and
 //! the only added cost is a non-blocking event emit.
 //!
 //! Tokio `mpsc` exposes no cheap exact `len()` on the sender side, so `queue_len` is read
@@ -42,7 +38,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::{SendError, SendTimeoutError, TryRecvError, TrySendError};
 
 use crate::channels::{
-    register_channel_wrap, send_channel_event, ChannelEvent, ChannelType, Instant,
+    register_channel, send_channel_event, ChannelEvent, ChannelType, Instant,
     InstrumentChannelWrap, InstrumentChannelWrapLog,
 };
 
@@ -839,9 +835,9 @@ fn build_bounded<T>(
     iter: bool,
 ) -> (Sender<T>, Receiver<T>) {
     let capacity = inner.0.max_capacity();
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Bounded(capacity), iter);
+    let id = register_channel::<T>(source, label, ChannelType::Bounded(capacity), iter);
     // Rebuild to carry `(msg_id, send_ts, T)`; the caller's channel is discarded
-    // (wrap mode is inline-only), only its capacity is copied.
+    // (the wrapper is inline-only), only its capacity is copied.
     let (tx, rx) = mpsc::channel::<Payload<T>>(capacity);
     let depth = Arc::new(AtomicUsize::new(0));
     let closed = Arc::new(AtomicBool::new(false));
@@ -879,7 +875,7 @@ fn build_unbounded<T>(
     log_fn: Option<fn(&T) -> String>,
     iter: bool,
 ) -> (UnboundedSender<T>, UnboundedReceiver<T>) {
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Unbounded, iter);
+    let id = register_channel::<T>(source, label, ChannelType::Unbounded, iter);
     let (tx, rx) = mpsc::unbounded_channel::<Payload<T>>();
     let depth = Arc::new(AtomicUsize::new(0));
     let closed = Arc::new(AtomicBool::new(false));

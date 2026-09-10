@@ -114,7 +114,7 @@ pub mod wrap {
             pub use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
             /// Instrumented `std::sync::mpsc` channel endpoints for
-            /// `channel!(..., wrap = true)`. With `hotpath` enabled these are the
+            /// `channel!`. With `hotpath` enabled these are the
             /// instrumented wrappers; otherwise `channel!` is a no-op and the endpoints
             /// are the raw std types, so the alias resolves the same way regardless of
             /// feature configuration.
@@ -169,7 +169,7 @@ pub mod wrap {
             };
 
             /// Instrumented `tokio::sync::mpsc` channel endpoints for
-            /// `channel!(..., wrap = true)`. With `hotpath` enabled these are the
+            /// `channel!`. With `hotpath` enabled these are the
             /// instrumented wrappers; otherwise `channel!` is a no-op and the endpoints
             /// are the raw tokio types, so the alias resolves the same way regardless of
             /// feature configuration.
@@ -200,7 +200,7 @@ pub mod wrap {
         }
     }
 
-    /// Instrumented crossbeam channel endpoints for `channel!(..., wrap = true)`.
+    /// Instrumented crossbeam channel endpoints for `channel!`.
     /// With `hotpath` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw crossbeam types, so the
     /// alias resolves the same way regardless of feature configuration.
@@ -212,7 +212,7 @@ pub mod wrap {
         pub use crossbeam_channel::{Receiver, Sender};
     }
 
-    /// Instrumented flume channel endpoints for `channel!(..., wrap = true)`.
+    /// Instrumented flume channel endpoints for `channel!`.
     /// With `hotpath` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw flume types, so the
     /// alias resolves the same way regardless of feature configuration.
@@ -224,7 +224,7 @@ pub mod wrap {
         pub use flume::{Receiver, Sender};
     }
 
-    /// Instrumented async-channel endpoints for `channel!(..., wrap = true)`.
+    /// Instrumented async-channel endpoints for `channel!`.
     /// With `hotpath` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw async-channel types, so the
     /// alias resolves the same way regardless of feature configuration.

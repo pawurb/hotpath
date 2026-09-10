@@ -49,17 +49,16 @@ pub mod tests {
         let channels = parse_channels(&stdout);
 
         for label in ["a", "b", "c", "d", "e", "f", "g", "h"] {
-            let entry = channels
+            channels
                 .data
                 .iter()
                 .find(|c| c.label == label)
                 .unwrap_or_else(|| panic!("channel {label:?} not found"));
-            assert!(entry.wrap, "channel {label:?} should be endpoint-wrapped");
         }
     }
 
     // The self-tracked queue counter reports the exact depth (50 messages parked,
-    // none received), where a forwarder proxy would drain immediately and report ~0.
+    // none received), where a forwarder would drain immediately and report ~0.
     //
     // cargo run -p test-channels-std --example wrap_std --features hotpath
     #[test]
@@ -72,8 +71,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-queue")
             .expect("wrap-queue channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 50, "expected 50 sends");
         assert_eq!(
             entry.received_count, 0,
@@ -105,8 +102,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-unbounded")
             .expect("wrap-unbounded channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(entry.sent_count, 200, "expected 200 sends");
         assert_eq!(entry.received_count, 200, "expected 200 receives");
         assert_eq!(entry.queue_size, Some(0), "expected drained queue");
@@ -135,8 +130,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "wrap-concurrent")
             .expect("wrap-concurrent channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert!(
             entry.received_count <= entry.sent_count,
             "received ({}) must not exceed sent ({})",
@@ -164,8 +157,6 @@ pub mod tests {
             .iter()
             .find(|c| c.label == "recv-dropped")
             .expect("recv-dropped channel not found");
-
-        assert!(entry.wrap, "channel should be endpoint-wrapped");
         assert_eq!(
             entry.state.as_deref(),
             Some("closed"),

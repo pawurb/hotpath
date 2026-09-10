@@ -102,7 +102,7 @@ pub(crate) fn report_channels_table(
             channel_stats.label.as_deref(),
             Some(channel_stats.iter),
         );
-        // Queue depth is only tracked for `wrap = true` channels; proxy channels show `-`.
+        // `None` until the first message event.
         let max_queue = channel_stats
             .max_queue_size
             .map_or_else(|| "-".to_string(), |q| q.to_string());
@@ -131,10 +131,7 @@ pub(crate) fn report_channel_latency_table(
     percentiles: &[f64],
     writer: &mut dyn Write,
 ) {
-    let rows: Vec<&ChannelEntry> = channels
-        .iter()
-        .filter(|c| c.has_proc_hist() && c.received_count > 0)
-        .collect();
+    let rows: Vec<&ChannelEntry> = channels.iter().filter(|c| c.received_count > 0).collect();
     if rows.is_empty() {
         return;
     }

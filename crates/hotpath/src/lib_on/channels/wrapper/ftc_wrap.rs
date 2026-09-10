@@ -1,10 +1,7 @@
 //! Endpoint-wrapping `futures_channel::mpsc` instrumentation for the `channel!` macro.
 //!
-//! Wraps the `Sender`/`Receiver` endpoints directly, unlike the forwarder-proxy in
-//! [`crate::channels::wrapper::ftc`], which spawns a background task that relays every
-//! message through a second channel. Wrap mode removes the task and the second channel,
-//! so sends and receives hit the real channel and the only added cost is a non-blocking
-//! event emit.
+//! Wraps the `Sender`/`Receiver` endpoints directly: sends and receives hit the real
+//! channel and the only added cost is a non-blocking event emit.
 //!
 //! futures `mpsc` exposes no `len()` on the bounded endpoints, so `queue_len` is read
 //! from a self-maintained `AtomicUsize`: incremented before each push (rolled back if the
@@ -44,10 +41,10 @@ use std::task::{Context, Poll};
 use futures_channel::mpsc;
 use futures_channel::mpsc::{SendError, TryRecvError};
 use futures_core::stream::{FusedStream, Stream};
-use futures_util::sink::Sink;
+use futures_sink::Sink;
 
 use crate::channels::{
-    register_channel_wrap, send_channel_event, ChannelEvent, ChannelType, Instant,
+    register_channel, send_channel_event, ChannelEvent, ChannelType, Instant,
     InstrumentChannelWrap, InstrumentChannelWrapLog,
 };
 
@@ -604,9 +601,9 @@ fn build_bounded<T>(
     let Some(capacity) = capacity else {
         panic!("Capacity is required for bounded futures channels, because they don't expose their capacity in a public API");
     };
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Bounded(capacity), iter);
+    let id = register_channel::<T>(source, label, ChannelType::Bounded(capacity), iter);
     // Rebuild to carry `(msg_id, send_ts, T)`; the caller's channel is discarded
-    // (wrap mode is inline-only).
+    // (the wrapper is inline-only).
     let (tx, rx) = mpsc::channel::<Payload<T>>(capacity);
     let side = send_side(id, iter, log_fn);
     let receiver = Receiver {
@@ -624,7 +621,7 @@ fn build_unbounded<T>(
     log_fn: Option<fn(&T) -> String>,
     iter: bool,
 ) -> (UnboundedSender<T>, UnboundedReceiver<T>) {
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Unbounded, iter);
+    let id = register_channel::<T>(source, label, ChannelType::Unbounded, iter);
     let (tx, rx) = mpsc::unbounded::<Payload<T>>();
     let side = send_side(id, iter, log_fn);
     let receiver = UnboundedReceiver {
