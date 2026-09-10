@@ -39,7 +39,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use futures_channel::mpsc;
-use futures_channel::mpsc::{SendError, TryRecvError};
+use futures_channel::mpsc::{RecvError, SendError, TryRecvError};
 use futures_core::stream::{FusedStream, Stream};
 use futures_sink::Sink;
 
@@ -307,6 +307,12 @@ impl<T> Receiver<T> {
         self.inner.close();
     }
 
+    pub async fn recv(&mut self) -> Result<T, RecvError> {
+        let (msg_id, send_ts, msg) = self.inner.recv().await?;
+        self.on_received(msg_id, send_ts);
+        Ok(msg)
+    }
+
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         let (msg_id, send_ts, msg) = self.inner.try_recv()?;
         self.on_received(msg_id, send_ts);
@@ -504,6 +510,12 @@ impl<T> UnboundedReceiver<T> {
         self.inner.close();
     }
 
+    pub async fn recv(&mut self) -> Result<T, RecvError> {
+        let (msg_id, send_ts, msg) = self.inner.recv().await?;
+        self.on_received(msg_id, send_ts);
+        Ok(msg)
+    }
+
     pub fn try_recv(&mut self) -> Result<T, TryRecvError> {
         let (msg_id, send_ts, msg) = self.inner.try_recv()?;
         self.on_received(msg_id, send_ts);
@@ -698,6 +710,7 @@ mod tests {
     use crate::channels::wrapper::ftc_wrap::{
         build_bounded, build_unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender,
     };
+    use futures_channel::mpsc::RecvError;
     use futures_core::stream::{FusedStream, Stream};
     use futures_util::{SinkExt, StreamExt};
 
@@ -739,6 +752,21 @@ mod tests {
         assert_eq!(rx.next().await, Some(7));
         assert_eq!(rx.next().await, Some(8));
         assert!(tx.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recv_returns_messages_then_error_when_closed() {
+        let (mut tx, mut rx) = bounded::<u32>(1);
+        tx.send(1).await.unwrap();
+        assert_eq!(rx.recv().await, Ok(1));
+        drop(tx);
+        assert_eq!(rx.recv().await, Err(RecvError));
+
+        let (tx, mut rx) = unbounded::<u32>();
+        tx.unbounded_send(2).unwrap();
+        assert_eq!(rx.recv().await, Ok(2));
+        drop(tx);
+        assert_eq!(rx.recv().await, Err(RecvError));
     }
 
     #[test]
