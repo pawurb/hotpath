@@ -29,15 +29,15 @@ fn main() {
     }
 
     let baseline = phase!(crossbeam_channel::unbounded::<u64>());
-    let wrap = phase!(hotpath::channel!(
+    let instrumented = phase!(hotpath::channel!(
         crossbeam_channel::unbounded::<u64>(),
-        label = "wrap"
+        label = "instrumented"
     ));
 
     report(
         "crossbeam",
         runs,
-        &[("baseline (raw)", baseline), ("instrumented", wrap)],
+        &[("baseline (raw)", baseline), ("instrumented", instrumented)],
     );
 }
 

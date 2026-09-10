@@ -31,15 +31,15 @@ fn main() {
         }
 
         let baseline = phase!(futures_channel::mpsc::unbounded::<u64>());
-        let wrap = phase!(hotpath::channel!(
+        let instrumented = phase!(hotpath::channel!(
             futures_channel::mpsc::unbounded::<u64>(),
-            label = "wrap"
+            label = "instrumented"
         ));
 
         report(
             "futures",
             runs,
-            &[("baseline (raw)", baseline), ("instrumented", wrap)],
+            &[("baseline (raw)", baseline), ("instrumented", instrumented)],
         );
     })
 }

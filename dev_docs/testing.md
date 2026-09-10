@@ -20,7 +20,7 @@ fn parse_channels(stdout: &str) -> JsonChannelsList {
 }
 ```
 
-See `tests/channels_crossbeam_wrap.rs`.
+See `tests/channels_crossbeam.rs`.
 
 Conventions: use a single module-level `#[cfg(all(test, feature = "hotpath"))]` guard per test file (not per-item annotations), and give each endpoint-polling test file its own `HOTPATH_METRICS_PORT` so parallel test files don't collide.
 
