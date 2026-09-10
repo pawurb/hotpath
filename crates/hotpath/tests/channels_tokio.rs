@@ -207,7 +207,11 @@ pub mod tests {
 
         let sep = path_sep();
         let json_path = format!("\"label\": \"examples{sep}basic_json_tokio.rs:");
-        let all_expected = [json_path.as_str(), "\"label\": \"hello-there\""];
+        let all_expected = [
+            json_path.as_str(),
+            "\"label\": \"hello-there\"",
+            "\"state\": \"notified\"",
+        ];
 
         let stdout = String::from_utf8_lossy(&output.stdout);
 

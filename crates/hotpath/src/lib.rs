@@ -185,6 +185,18 @@ pub mod wrap {
                     WeakUnboundedSender,
                 };
             }
+
+            /// Instrumented `tokio::sync::oneshot` channel endpoints for the default
+            /// `channel!` mode. With `hotpath` enabled these are the instrumented
+            /// wrappers; otherwise `channel!` is a no-op and the endpoints are the raw
+            /// tokio types, so the alias resolves the same way regardless of feature
+            /// configuration.
+            pub mod oneshot {
+                #[cfg(feature = "hotpath")]
+                pub use crate::lib_on::channels::wrapper::tokio_oneshot_wrap::{Receiver, Sender};
+                #[cfg(not(feature = "hotpath"))]
+                pub use tokio::sync::oneshot::{Receiver, Sender};
+            }
         }
     }
 

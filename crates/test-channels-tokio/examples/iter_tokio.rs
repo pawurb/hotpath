@@ -50,11 +50,7 @@ async fn main() {
 
     println!("\nCreating 3 oneshot channels:");
     for i in 0..3 {
-        let (tx, rx) = hotpath::channel!(
-            tokio::sync::oneshot::channel::<String>(),
-            proxy = true,
-            iter = true
-        );
+        let (tx, rx) = hotpath::channel!(tokio::sync::oneshot::channel::<String>(), iter = true);
 
         println!("  - Created oneshot channel {}", i);
 

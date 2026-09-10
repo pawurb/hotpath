@@ -7,7 +7,7 @@ async fn main() {
         .sections(vec![hotpath::Section::Channels])
         .build();
 
-    let (tx, rx) = hotpath::channel!(tokio::sync::oneshot::channel::<String>(), proxy = true);
+    let (tx, rx) = hotpath::channel!(tokio::sync::oneshot::channel::<String>());
 
     drop(rx);
 
