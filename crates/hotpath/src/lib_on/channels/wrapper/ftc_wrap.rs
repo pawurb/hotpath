@@ -356,6 +356,9 @@ impl<T> FusedStream for Receiver<T> {
 
 impl<T> Drop for Receiver<T> {
     fn drop(&mut self) {
+        // Close first so a send racing this drop fails instead of landing after
+        // the remaining count is read.
+        self.inner.close();
         crate::channels::mark_closed(&self.closed, self.id, self.inner.size_hint().0);
     }
 }
@@ -550,6 +553,9 @@ impl<T> FusedStream for UnboundedReceiver<T> {
 
 impl<T> Drop for UnboundedReceiver<T> {
     fn drop(&mut self) {
+        // Close first so a send racing this drop fails instead of landing after
+        // the remaining count is read.
+        self.inner.close();
         crate::channels::mark_closed(&self.closed, self.id, self.inner.size_hint().0);
     }
 }
