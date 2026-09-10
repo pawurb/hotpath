@@ -575,4 +575,279 @@ pub mod tests {
 
         fs::remove_file(output_path).ok();
     }
+
+    // The self-tracked queue counter reports the exact depth (50 messages parked,
+    // none received), where a forwarder would drain immediately and report ~0.
+    // Tokio recovers bounded capacity from `max_capacity()`, so no `capacity` arg.
+    //
+    // cargo run -p test-channels-tokio --example wrap_tokio --features hotpath
+    #[test]
+    fn test_exact_queue_depth() {
+        let stdout = run_example("wrap_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-queue")
+            .expect("wrap-queue channel not found");
+        assert_eq!(entry.sent_count, 50, "expected 50 sends");
+        assert_eq!(
+            entry.received_count, 0,
+            "expected 0 receives at report time"
+        );
+        assert_eq!(
+            entry.queue_size,
+            Some(50),
+            "expected exact queue depth of 50"
+        );
+        assert_eq!(
+            entry.max_queue_size,
+            Some(50),
+            "expected max queue depth of 50"
+        );
+    }
+
+    // Unbounded: every message sent and drained, queue back to zero with the
+    // high-water mark preserved.
+    //
+    // cargo run -p test-channels-tokio --example wrap_unbounded_tokio --features hotpath
+    #[test]
+    fn test_unbounded_sent_received() {
+        let stdout = run_example("wrap_unbounded_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-unbounded")
+            .expect("wrap-unbounded channel not found");
+        assert_eq!(entry.sent_count, 200, "expected 200 sends");
+        assert_eq!(entry.received_count, 200, "expected 200 receives");
+        assert_eq!(entry.queue_size, Some(0), "expected drained queue");
+        assert_eq!(
+            entry.max_queue_size,
+            Some(200),
+            "expected max queue depth of 200"
+        );
+    }
+
+    // A producer racing a consumer on an unbounded channel must never underflow
+    // the depth counter (counting happens before each publish). `run_example` already
+    // asserts the process exited successfully - in debug builds an underflow would
+    // panic the consumer task and fail that check. Here we additionally assert the
+    // counter never wrapped: a release-build underflow would surface as an absurd
+    // queue length, so `received <= sent` and a bounded `max_queue_size` confirm sanity.
+    //
+    // cargo run -p test-channels-tokio --example wrap_concurrent_tokio --features hotpath
+    #[test]
+    fn test_concurrent_no_underflow() {
+        let stdout = run_example("wrap_concurrent_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-concurrent")
+            .expect("wrap-concurrent channel not found");
+        assert!(
+            entry.received_count <= entry.sent_count,
+            "received ({}) must not exceed sent ({})",
+            entry.received_count,
+            entry.sent_count
+        );
+        assert!(
+            entry.max_queue_size.unwrap_or(0) <= entry.sent_count as usize,
+            "max queue ({:?}) is absurd - the depth counter underflowed and wrapped",
+            entry.max_queue_size
+        );
+    }
+
+    // Dropping the single receiver while the sender is alive must mark the channel
+    // closed. tokio receivers are not Clone, so there is no clone-count path.
+    //
+    // cargo run -p test-channels-tokio --example wrap_closed_tokio --features hotpath
+    #[test]
+    fn test_receiver_dropped_closes() {
+        let stdout = run_example("wrap_closed_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "recv-dropped")
+            .expect("recv-dropped channel not found");
+        assert_eq!(
+            entry.state.as_deref(),
+            Some("closed"),
+            "expected closed state after receiver drop"
+        );
+    }
+
+    // Weak senders: the example asserts the downgrade/upgrade lifecycle in-process
+    // (upgrade fails after all strong senders drop, wrapper counts match the
+    // receiver-side counts); here we assert the report sees the upgraded sender's
+    // traffic and exactly one Closed transition (state is terminal-closed, counters
+    // intact).
+    //
+    // cargo run -p test-channels-tokio --example weak_tokio --features hotpath
+    #[test]
+    fn test_weak_senders() {
+        let stdout = run_example("weak_tokio");
+        let channels = parse_channels(&stdout);
+
+        for label in ["wrap-weak", "wrap-weak-unbounded"] {
+            let entry = channels
+                .data
+                .iter()
+                .find(|c| c.label == label)
+                .unwrap_or_else(|| panic!("{label} channel not found"));
+            assert_eq!(entry.sent_count, 2, "expected 2 sends on {label}");
+            assert_eq!(entry.received_count, 2, "expected 2 receives on {label}");
+            assert_eq!(
+                entry.state.as_deref(),
+                Some("closed"),
+                "expected closed state after all strong senders dropped on {label}"
+            );
+        }
+    }
+
+    // Batch receive: recv_many drains in chunks but every message gets its own
+    // receive event, so counts are exact, the queue returns to zero, and the delay
+    // histogram is populated.
+    //
+    // cargo run -p test-channels-tokio --example recv_many_tokio --features hotpath
+    #[test]
+    fn test_recv_many() {
+        let stdout = run_example("recv_many_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-recv-many")
+            .expect("wrap-recv-many channel not found");
+        assert_eq!(entry.sent_count, 60, "expected 60 sends");
+        assert_eq!(entry.received_count, 60, "expected 60 receives");
+        assert_eq!(entry.queue_size, Some(0), "expected drained queue");
+        assert!(
+            entry.proc_avg.is_some(),
+            "expected populated delay histogram"
+        );
+
+        let unbounded = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-recv-many-unbounded")
+            .expect("wrap-recv-many-unbounded channel not found");
+        assert_eq!(unbounded.sent_count, 30, "expected 30 sends");
+        assert_eq!(unbounded.received_count, 30, "expected 30 receives");
+        assert_eq!(unbounded.queue_size, Some(0), "expected drained queue");
+    }
+
+    // Blocking variants driven from std threads without a runtime: stats recorded,
+    // no panic (the example itself asserts message ordering).
+    //
+    // cargo run -p test-channels-tokio --example blocking_tokio --features hotpath
+    #[test]
+    fn test_blocking_off_runtime() {
+        let stdout = run_example("blocking_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-blocking")
+            .expect("wrap-blocking channel not found");
+        assert_eq!(entry.sent_count, 25, "expected 25 sends");
+        assert_eq!(entry.received_count, 25, "expected 25 receives");
+        assert_eq!(entry.queue_size, Some(0), "expected drained queue");
+    }
+
+    // A timed-out send_timeout on a full channel rolls the depth counter back:
+    // the failed send is not counted and the queue never exceeds capacity.
+    //
+    // cargo run -p test-channels-tokio --example send_timeout_tokio --features hotpath
+    #[test]
+    fn test_send_timeout_rollback() {
+        let stdout = run_example("send_timeout_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-send-timeout")
+            .expect("wrap-send-timeout channel not found");
+        assert_eq!(entry.sent_count, 5, "timed-out send must not be counted");
+        assert_eq!(
+            entry.queue_size,
+            Some(5),
+            "queue must not exceed capacity after rollback"
+        );
+        assert_eq!(
+            entry.max_queue_size,
+            Some(5),
+            "max queue must not exceed capacity after rollback"
+        );
+    }
+
+    // Manual polling via poll_recv/poll_recv_many records every receive; the
+    // example exercises a Pending-then-Ready sequence on the reusable scratch buffer.
+    //
+    // cargo run -p test-channels-tokio --example poll_recv_tokio --features hotpath
+    #[test]
+    fn test_poll_recv() {
+        let stdout = run_example("poll_recv_tokio");
+        let channels = parse_channels(&stdout);
+
+        let entry = channels
+            .data
+            .iter()
+            .find(|c| c.label == "wrap-poll-recv")
+            .expect("wrap-poll-recv channel not found");
+        assert_eq!(entry.sent_count, 30, "expected 30 sends");
+        assert_eq!(entry.received_count, 30, "expected 30 receives");
+        assert_eq!(entry.queue_size, Some(0), "expected drained queue");
+    }
+
+    // Two `channel!` invocations on one physical line (same message type) must
+    // register distinct entries: the registration key includes the column, so
+    // the second call site does not reuse the first one's id. The displayed
+    // source keeps the plain `file:line` form.
+    //
+    // cargo run -p test-channels-tokio --example same_line_tokio --features hotpath
+    #[test]
+    fn test_same_line_call_sites_stay_distinct() {
+        let stdout = run_example("same_line_tokio");
+        let channels = parse_channels(&stdout);
+
+        let a = channels
+            .data
+            .iter()
+            .find(|c| c.label == "same-line-a")
+            .expect("same-line-a channel not found");
+        let b = channels
+            .data
+            .iter()
+            .find(|c| c.label == "same-line-b")
+            .expect("same-line-b channel not found");
+
+        assert_ne!(a.id, b.id, "same-line call sites must not share an entry");
+        assert_eq!(a.sent_count, 3, "counts must not merge across call sites");
+        assert_eq!(b.sent_count, 5, "counts must not merge across call sites");
+        assert_eq!(a.channel_type, "bounded[4]");
+        assert_eq!(b.channel_type, "bounded[8]");
+        assert_eq!(a.instances, 1);
+        assert_eq!(b.instances, 1);
+
+        // The displayed source is identical for both (same file:line) and the
+        // path contains no ':', so exactly one colon proves the column stays
+        // out of the display string.
+        assert_eq!(a.source, b.source, "one physical line renders one source");
+        assert_eq!(
+            a.source.matches(':').count(),
+            1,
+            "source must stay file:line"
+        );
+    }
 }

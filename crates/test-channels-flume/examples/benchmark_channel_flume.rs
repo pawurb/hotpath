@@ -30,12 +30,15 @@ fn main() {
         }
 
         let baseline = phase!(flume::unbounded::<u64>());
-        let wrap = phase!(hotpath::channel!(flume::unbounded::<u64>(), label = "wrap"));
+        let instrumented = phase!(hotpath::channel!(
+            flume::unbounded::<u64>(),
+            label = "instrumented"
+        ));
 
         report(
             "flume",
             runs,
-            &[("baseline (raw)", baseline), ("instrumented", wrap)],
+            &[("baseline (raw)", baseline), ("instrumented", instrumented)],
         );
     })
 }

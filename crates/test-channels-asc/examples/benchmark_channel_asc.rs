@@ -30,15 +30,15 @@ fn main() {
         }
 
         let baseline = phase!(async_channel::unbounded::<u64>());
-        let wrap = phase!(hotpath::channel!(
+        let instrumented = phase!(hotpath::channel!(
             async_channel::unbounded::<u64>(),
-            label = "wrap"
+            label = "instrumented"
         ));
 
         report(
             "async",
             runs,
-            &[("baseline (raw)", baseline), ("instrumented", wrap)],
+            &[("baseline (raw)", baseline), ("instrumented", instrumented)],
         );
     })
 }

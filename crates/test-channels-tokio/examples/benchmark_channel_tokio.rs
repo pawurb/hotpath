@@ -30,15 +30,15 @@ async fn main() {
     }
 
     let baseline = phase!(tokio::sync::mpsc::unbounded_channel::<u64>());
-    let wrap = phase!(hotpath::channel!(
+    let instrumented = phase!(hotpath::channel!(
         tokio::sync::mpsc::unbounded_channel::<u64>(),
-        label = "wrap"
+        label = "instrumented"
     ));
 
     report(
         "tokio",
         runs,
-        &[("baseline (raw)", baseline), ("instrumented", wrap)],
+        &[("baseline (raw)", baseline), ("instrumented", instrumented)],
     );
 }
 

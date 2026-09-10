@@ -29,15 +29,15 @@ fn main() {
     }
 
     let baseline = phase!(std::sync::mpsc::channel::<u64>());
-    let wrap = phase!(hotpath::channel!(
+    let instrumented = phase!(hotpath::channel!(
         std::sync::mpsc::channel::<u64>(),
-        label = "wrap"
+        label = "instrumented"
     ));
 
     report(
         "std",
         runs,
-        &[("baseline (raw)", baseline), ("instrumented", wrap)],
+        &[("baseline (raw)", baseline), ("instrumented", instrumented)],
     );
 }
 
