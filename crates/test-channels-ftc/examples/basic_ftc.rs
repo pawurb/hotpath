@@ -23,13 +23,11 @@ fn main() {
 
         let (txa, mut _rxa) = hotpath::channel!(
             futures_channel::mpsc::unbounded::<i32>(),
-            proxy = true,
             label = _actor1.name
         );
 
         let (mut txb, mut rxb) = hotpath::channel!(
             futures_channel::mpsc::channel::<i32>(10),
-            proxy = true,
             capacity = 10,
             label = "bounded-channel"
         );
