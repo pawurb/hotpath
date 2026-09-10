@@ -1,8 +1,7 @@
 //! Endpoint-wrapping `std::sync::mpsc` channel instrumentation for the `channel!` macro.
 //!
-//! Wraps the `Sender`/`SyncSender`/`Receiver` endpoints directly (unlike the
-//! forwarder-proxy in [`crate::channels::wrapper::std`]): no extra thread or proxy
-//! channel, so send/recv hit the real channel.
+//! Wraps the `Sender`/`SyncSender`/`Receiver` endpoints directly, so send/recv hit the
+//! real channel.
 //!
 //! `std::sync::mpsc` exposes no public `len()`, so `queue_len` is read from a
 //! self-maintained `AtomicUsize`: incremented before each publish (rolled back if the
@@ -43,7 +42,7 @@ use std::sync::mpsc::{
 use std::sync::Arc;
 
 use crate::channels::{
-    register_channel_wrap, send_channel_event, ChannelEvent, ChannelType, Instant,
+    register_channel, send_channel_event, ChannelEvent, ChannelType, Instant,
     InstrumentChannelWrap, InstrumentChannelWrapLog,
 };
 
@@ -375,7 +374,7 @@ fn build_unbounded<T>(
     log_fn: Option<fn(&T) -> String>,
     iter: bool,
 ) -> (Sender<T>, Receiver<T>) {
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Unbounded, iter);
+    let id = register_channel::<T>(source, label, ChannelType::Unbounded, iter);
     let (tx, rx) = mpsc::channel::<Payload<T>>();
     let depth = Arc::new(AtomicUsize::new(0));
     let closed = Arc::new(AtomicBool::new(false));
@@ -412,7 +411,7 @@ fn build_bounded<T>(
     log_fn: Option<fn(&T) -> String>,
     iter: bool,
 ) -> (SyncSender<T>, Receiver<T>) {
-    let id = register_channel_wrap::<T>(source, label, ChannelType::Bounded(capacity), iter);
+    let id = register_channel::<T>(source, label, ChannelType::Bounded(capacity), iter);
     let (tx, rx) = mpsc::sync_channel::<Payload<T>>(capacity);
     let depth = Arc::new(AtomicUsize::new(0));
     let closed = Arc::new(AtomicBool::new(false));

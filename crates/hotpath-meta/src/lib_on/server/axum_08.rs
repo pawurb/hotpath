@@ -14,7 +14,9 @@ use tower_layer::Layer;
 use tower_service::Service;
 
 use crate::instant::Instant;
-use crate::lib_on::caller_stack::{enter_route, intern_route, route_scope_enabled, RequestCalls};
+use crate::lib_on::caller_stack::{
+    enter_layer, enter_route, intern_route, route_scope_enabled, RequestAlloc, RequestCalls,
+};
 use crate::lib_on::server::{send_server_event, AxumLayer, ServerEvent};
 
 impl<S> Layer<S> for AxumLayer {
@@ -54,7 +56,9 @@ where
             route,
             matched,
             scope,
+            shadowed: false,
             calls: RequestCalls::ZERO,
+            alloc: RequestAlloc::ZERO,
             start: Instant::now(),
         }
     }
@@ -83,8 +87,14 @@ pin_project! {
         // Only matched templates are interned: raw paths of unmatched requests
         // are unbounded and would leak through the route interner.
         scope: Option<&'static str>,
+        // An outer `AxumLayer` already owns this request (nested router
+        // wrapped twice, or a sub-request): stay silent instead of counting
+        // it a second time.
+        shadowed: bool,
         // SQL queries / outbound HTTP requests issued so far under `scope`.
         calls: RequestCalls,
+        // Bytes / allocations made so far under `scope` (`hotpath-alloc`).
+        alloc: RequestAlloc,
         start: Instant,
     }
 }
@@ -98,11 +108,21 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let outcome = {
-            // The guard writes the scope's call counts back into `this.calls`
-            // on drop, including on the early return of `ready!`.
-            let _route_scope = this.scope.map(|route| enter_route(route, this.calls));
+            let layer = enter_layer(this.route);
+            if layer.is_none() {
+                *this.shadowed = true;
+            }
+            // The guard writes the scope's counters back into `this.calls` /
+            // `this.alloc` on drop, including on the early return of `ready!`.
+            let _route_scope = layer
+                .as_ref()
+                .and(*this.scope)
+                .and_then(|route| enter_route(route, this.calls, this.alloc));
             ready!(this.inner.poll(cx))
         };
+        if *this.shadowed {
+            return Poll::Ready(outcome);
+        }
         if let Ok(response) = &outcome {
             send_server_event(ServerEvent::Completed {
                 route: Arc::clone(this.route),
@@ -111,6 +131,7 @@ where
                 status: response.status().as_u16(),
                 timestamp_ns: crate::lib_on::current_elapsed_ns(),
                 calls: this.scope.map(|_| *this.calls),
+                alloc: this.scope.map(|_| *this.alloc),
             });
         }
         Poll::Ready(outcome)

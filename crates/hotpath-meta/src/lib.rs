@@ -98,7 +98,7 @@ pub mod wrap {
             pub use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
             /// Instrumented `std::sync::mpsc` channel endpoints for
-            /// `channel!(..., wrap = true)`. With `hotpath-meta` enabled these are the
+            /// `channel!`. With `hotpath-meta` enabled these are the
             /// instrumented wrappers; otherwise `channel!` is a no-op and the endpoints
             /// are the raw std types, so the alias resolves the same way regardless of
             /// feature configuration.
@@ -114,7 +114,7 @@ pub mod wrap {
     }
 
     /// Instrumented `tokio::sync::mpsc` channel endpoints for
-    /// `channel!(..., wrap = true)`. With `hotpath-meta` enabled these are the
+    /// `channel!`. With `hotpath-meta` enabled these are the
     /// instrumented wrappers; otherwise `channel!` is a no-op and the endpoints
     /// are the raw tokio types, so the alias resolves the same way regardless of
     /// feature configuration.
@@ -133,10 +133,22 @@ pub mod wrap {
                     WeakUnboundedSender,
                 };
             }
+
+            /// Instrumented `tokio::sync::oneshot` channel endpoints for the default
+            /// `channel!` mode. With `hotpath-meta` enabled these are the instrumented
+            /// wrappers; otherwise `channel!` is a no-op and the endpoints are the raw
+            /// tokio types, so the alias resolves the same way regardless of feature
+            /// configuration.
+            pub mod oneshot {
+                #[cfg(feature = "hotpath-meta")]
+                pub use crate::lib_on::channels::wrapper::tokio_oneshot_wrap::{Receiver, Sender};
+                #[cfg(not(feature = "hotpath-meta"))]
+                pub use tokio::sync::oneshot::{Receiver, Sender};
+            }
         }
     }
 
-    /// Instrumented crossbeam channel endpoints for `channel!(..., wrap = true)`.
+    /// Instrumented crossbeam channel endpoints for `channel!`.
     /// With `hotpath-meta` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw crossbeam types, so the
     /// alias resolves the same way regardless of feature configuration.
@@ -148,7 +160,7 @@ pub mod wrap {
         pub use crossbeam_channel::{Receiver, Sender};
     }
 
-    /// Instrumented flume channel endpoints for `channel!(..., wrap = true)`.
+    /// Instrumented flume channel endpoints for `channel!`.
     /// With `hotpath-meta` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw flume types, so the
     /// alias resolves the same way regardless of feature configuration.
@@ -160,7 +172,7 @@ pub mod wrap {
         pub use flume::{Receiver, Sender};
     }
 
-    /// Instrumented async-channel endpoints for `channel!(..., wrap = true)`.
+    /// Instrumented async-channel endpoints for `channel!`.
     /// With `hotpath-meta` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw async-channel types, so the
     /// alias resolves the same way regardless of feature configuration.
@@ -170,6 +182,31 @@ pub mod wrap {
         pub use crate::lib_on::channels::wrapper::asc_wrap::{Receiver, Sender};
         #[cfg(not(feature = "hotpath-meta"))]
         pub use async_channel::{Receiver, Sender};
+    }
+
+    /// Instrumented `futures_channel` endpoints for the default `channel!` mode.
+    /// With `hotpath-meta` enabled these are the instrumented wrappers; otherwise
+    /// `channel!` is a no-op and the endpoints are the raw futures types, so the
+    /// alias resolves the same way regardless of feature configuration.
+    #[cfg(feature = "futures")]
+    pub mod futures_channel {
+        pub mod mpsc {
+            #[cfg(feature = "hotpath-meta")]
+            pub use crate::lib_on::channels::wrapper::ftc_wrap::{
+                Receiver, Sender, TrySendError, UnboundedReceiver, UnboundedSender,
+            };
+            #[cfg(not(feature = "hotpath-meta"))]
+            pub use futures_channel::mpsc::{
+                Receiver, Sender, TrySendError, UnboundedReceiver, UnboundedSender,
+            };
+        }
+
+        pub mod oneshot {
+            #[cfg(feature = "hotpath-meta")]
+            pub use crate::lib_on::channels::wrapper::ftc_oneshot_wrap::{Receiver, Sender};
+            #[cfg(not(feature = "hotpath-meta"))]
+            pub use futures_channel::oneshot::{Receiver, Sender};
+        }
     }
 }
 

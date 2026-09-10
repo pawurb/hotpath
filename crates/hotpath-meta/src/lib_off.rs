@@ -123,7 +123,7 @@ impl GaugeHandle {
 
 #[macro_export]
 macro_rules! channel {
-    // Profiling disabled: every form (`wrap`, `label`, `log`, `capacity`, any order)
+    // Profiling disabled: every form (`label`, `log`, `capacity`, `iter`, any order)
     // returns the original channel unchanged.
     ($expr:expr $(, $($rest:tt)*)?) => {
         $expr

@@ -100,10 +100,10 @@ pub(crate) struct DataFlowLogEntry {
     pub message: Option<String>,
     pub tid: Option<u64>,
     /// Message identity used to pair a send with its matching receive; `None`
-    /// outside wrap mode (proxy mode, streams).
+    /// for streams.
     #[serde(default)]
     pub msg_id: Option<u64>,
-    /// Send-to-receive latency, set on wrap-mode receive entries. `None` when
+    /// Send-to-receive latency, set on channel receive entries. `None` when
     /// time sampling skipped the message or the entry has no delay to carry.
     #[serde(default)]
     pub delay_nanos: Option<u64>,

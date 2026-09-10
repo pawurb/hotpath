@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicU8, Ordering};
 
+#[cfg(feature = "axum-0-8")]
+use crate::lib_on::caller_stack::RequestAlloc;
 use crate::tid::current_tid;
 
 pub(crate) const MAX_DEPTH: usize = 64;
@@ -256,6 +258,12 @@ pub(crate) struct AllocationInfoStack {
     pub(crate) depth: Cell<u32>,
     pub(crate) elements: [AllocationInfo; MAX_DEPTH],
     pub(crate) tracking_enabled: Cell<bool>,
+    /// Running totals of the server request whose route scope is active on
+    /// this thread; fed by `pop_alloc_stack`, never by `track_alloc`.
+    #[cfg(feature = "axum-0-8")]
+    pub(crate) route: Cell<RequestAlloc>,
+    #[cfg(feature = "axum-0-8")]
+    pub(crate) route_active: Cell<bool>,
 }
 
 thread_local! {
@@ -268,8 +276,56 @@ thread_local! {
             count_total: Cell::new(0),
         } }; MAX_DEPTH],
         tracking_enabled: Cell::new(true),
+        #[cfg(feature = "axum-0-8")]
+        route: Cell::new(RequestAlloc::ZERO),
+        #[cfg(feature = "axum-0-8")]
+        route_active: Cell::new(false),
     } };
 }
+
+/// Opens the route scope's allocation window: installs the request's totals
+/// carried over from previous polls, so every allocation tracked on this
+/// thread until [`route_alloc_exit`] counts towards the request.
+///
+/// The window is a plain counter rather than a frame on the allocation stack:
+/// the route wants the inclusive total, so it needs no bucket of its own, and
+/// staying off the stack keeps it independent of guards whose lifetime
+/// straddles a poll boundary (`measure_block!` around an `.await`).
+#[cfg(feature = "axum-0-8")]
+#[inline]
+pub(crate) fn route_alloc_enter(carry: RequestAlloc) {
+    ALLOCATIONS.with(|stack| {
+        stack.route.set(carry);
+        stack.route_active.set(true);
+    });
+}
+
+/// Closes the window opened by [`route_alloc_enter`] and returns the request's
+/// totals so far.
+#[cfg(feature = "axum-0-8")]
+#[inline]
+pub(crate) fn route_alloc_exit() -> RequestAlloc {
+    ALLOCATIONS.with(|stack| {
+        stack.route_active.set(false);
+        stack.route.replace(RequestAlloc::ZERO)
+    })
+}
+
+/// Counts a tracked allocation towards the active route window, if any.
+#[cfg(feature = "axum-0-8")]
+#[inline]
+pub(crate) fn route_alloc_add(stack: &AllocationInfoStack, bytes: u64, count: u64) {
+    if stack.route_active.get() {
+        let mut total = stack.route.get();
+        total.bytes += bytes;
+        total.count += count;
+        stack.route.set(total);
+    }
+}
+
+#[cfg(not(feature = "axum-0-8"))]
+#[inline]
+pub(crate) fn route_alloc_add(_stack: &AllocationInfoStack, _bytes: u64, _count: u64) {}
 
 #[inline]
 pub(crate) fn track_alloc(size: usize) {
@@ -283,6 +339,7 @@ pub(crate) fn track_alloc(size: usize) {
         let info = &stack.elements[depth];
         info.bytes_total.set(info.bytes_total.get() + size as u64);
         info.count_total.set(info.count_total.get() + 1);
+        route_alloc_add(stack, size as u64, 1);
     });
 
     if !tracking_enabled {

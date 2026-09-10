@@ -352,7 +352,6 @@ pub struct JsonChannelEntry {
     pub received_per_sec: Option<f64>,
     pub type_name: String,
     pub type_size: usize,
-    pub wrap: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_size: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -604,6 +603,11 @@ pub struct JsonServerList {
     /// Total number of served requests across all entries, including ones
     /// truncated from `data` by the display limit.
     pub total_calls: u64,
+    /// Bytes allocated by scoped requests across all entries, including ones
+    /// truncated from `data`; the denominator of `alloc.percent_total`. Zero
+    /// unless built with `hotpath-alloc`.
+    #[serde(default)]
+    pub total_alloc_bytes: u64,
     pub percentiles: Vec<f64>,
     pub data: Vec<JsonServerEntry>,
     /// Number of entries measured, including ones truncated from `data` by
@@ -635,6 +639,35 @@ pub struct JsonServerEntry {
     pub total: String,
     pub percent_total: String,
     pub percentiles: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub histogram: Option<String>,
+    /// Memory allocated by requests of this route, present only when the
+    /// program was built with `hotpath-alloc`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alloc: Option<JsonServerAlloc>,
+}
+
+/// Allocation statistics of one route: bytes and allocation counts made
+/// under the route scope of each completed request (extractors, handler,
+/// serialization - everything polled inside the `AxumLayer` future), so the
+/// same scope rules as `sql_per_request` apply. `avg` / `total` /
+/// `percentiles` are formatted byte counts; `total_bytes` is raw.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JsonServerAlloc {
+    /// Average bytes allocated per scoped request; `None` when no completed
+    /// request of the route carried a route scope.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bytes_per_request: Option<f64>,
+    /// Average allocations per scoped request; same semantics.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allocs_per_request: Option<f64>,
+    pub total_bytes: u64,
+    pub avg: String,
+    pub total: String,
+    /// Share of `JsonServerList::total_alloc_bytes`.
+    pub percent_total: String,
+    pub percentiles: HashMap<String, String>,
+    /// Bytes-per-request histogram (base64 HdrHistogram), cloud path only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub histogram: Option<String>,
 }
@@ -741,10 +774,9 @@ fn format_sent_log_entry(
     current_elapsed_ns: u64,
     received_logs: &[DataFlowLogEntry],
 ) -> JsonChannelSentLog {
-    // Pair by message identity (wrap mode only). Proxy channels have no `msg_id`
-    // and their forwarder-stamped timestamps aren't true latency, so their delay
-    // is always "N/A". A received message without `delay_nanos` was skipped by
-    // time sampling.
+    // Pair by message identity. Entries without `msg_id` (streams) have no
+    // pairing, so their delay is always "N/A". A received message without
+    // `delay_nanos` was skipped by time sampling.
     let delay = match entry.msg_id {
         Some(sent_id) => received_logs
             .iter()
@@ -1354,11 +1386,9 @@ mod parse_tests {
         assert_eq!(by_index[&2], Some("3 ns".to_string()));
     }
 
-    /// Proxy channels (no `msg_id`) always show "N/A": their events are stamped
-    /// inside the forwarder thread, so the interval would be a misleading
-    /// forwarder-hop time rather than true send->receive latency.
+    /// Entries without `msg_id` cannot be paired, so the delay reads "N/A".
     #[test]
-    fn delay_is_na_for_proxy_channels_without_msg_id() {
+    fn delay_is_na_without_msg_id() {
         let logs = ChannelLogs {
             id: 1,
             sent_logs: vec![DataFlowLogEntry::new(1, 10, None, None, None, None)],
@@ -1369,7 +1399,7 @@ mod parse_tests {
         assert_eq!(out.sent_logs[0].delay, Some("N/A".to_string()));
     }
 
-    /// Unsampled wrap messages carry no `delay_nanos`, so the delay must read
+    /// Unsampled messages carry no `delay_nanos`, so the delay must read
     /// "N/A", not a bogus near-zero derived from drain-time stamps.
     #[test]
     fn delay_is_na_for_unsampled_wrap_messages() {

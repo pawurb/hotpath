@@ -51,29 +51,6 @@ pub(crate) fn register_channel<T>(
     channel_type: ChannelType,
     iter: bool,
 ) -> u32 {
-    register_channel_inner::<T>(key, label, channel_type, false, iter)
-}
-
-/// Like [`register_channel`] but marks the channel as endpoint-wrapped
-/// (`wrap = true`). Used by the instrumented endpoint wrappers in
-/// `wrapper/*_wrap.rs`.
-#[cfg_attr(not(feature = "crossbeam"), allow(dead_code))]
-pub(crate) fn register_channel_wrap<T>(
-    key: &'static str,
-    label: Option<String>,
-    channel_type: ChannelType,
-    iter: bool,
-) -> u32 {
-    register_channel_inner::<T>(key, label, channel_type, true, iter)
-}
-
-fn register_channel_inner<T>(
-    key: &'static str,
-    label: Option<String>,
-    channel_type: ChannelType,
-    wrap: bool,
-    iter: bool,
-) -> u32 {
     let type_name = std::any::type_name::<T>();
     let source = display_source(key);
     init_channels_state();
@@ -81,12 +58,12 @@ fn register_channel_inner<T>(
     if !iter {
         let map = CHANNEL_SOURCE_IDS.get_or_init(|| RwLock::new(HashMap::new()));
         if let Some(&id) = map.read().unwrap().get(&(key, type_name)) {
-            send_channel_event(ChannelEvent::Instance { id, wrap });
+            send_channel_event(ChannelEvent::Instance { id });
             return id;
         }
         let mut writer = map.write().unwrap();
         if let Some(&id) = writer.get(&(key, type_name)) {
-            send_channel_event(ChannelEvent::Instance { id, wrap });
+            send_channel_event(ChannelEvent::Instance { id });
             return id;
         }
         let id = next_channel_id();
@@ -100,7 +77,6 @@ fn register_channel_inner<T>(
             channel_type,
             type_name,
             type_size: mem::size_of::<T>(),
-            wrap,
             iter_mode: false,
         });
 
@@ -116,7 +92,6 @@ fn register_channel_inner<T>(
         channel_type,
         type_name,
         type_size: mem::size_of::<T>(),
-        wrap,
         iter_mode: true,
     });
 
@@ -135,7 +110,7 @@ pub(crate) fn send_channel_event(event: ChannelEvent) {
         return;
     }
     let _suspend = crate::lib_on::SuspendAllocTracking::new();
-    // `try_with`, not `with`: a `wrap = true` endpoint can emit an event (send,
+    // `try_with`, not `with`: an endpoint can emit an event (send,
     // recv, or `Closed` on drop) from a producer thread that is tearing down, when
     // this thread-local may already be destroyed. Dropping the event is fine;
     // panicking in a `Drop` would abort the process.
@@ -233,17 +208,14 @@ pub(crate) struct ChannelEntry {
     first_msg_ns: Option<u64>,
     pub(crate) type_name: &'static str,
     pub(crate) type_size: usize,
-    pub(crate) wrap: bool,
-    /// Exact channel depth, only tracked for `wrap` channels. `None` for proxy channels.
-    /// Derived from `sent_count - received_count` (converged value order-independent).
+    /// Exact channel depth, `None` until the first message event. Derived from
+    /// `sent_count - received_count` (converged value order-independent).
     pub(crate) queue_size: Option<usize>,
     pub(crate) max_queue_size: Option<usize>,
     /// Avg denominator is `proc_sampled_count` (one delay recorded per sampled receive).
     pub(crate) proc_total_nanos: u64,
     pub(crate) proc_sampled_count: u64,
-    /// `Some` only for `wrap` channels; `None` for proxy channels, which cannot
-    /// measure latency accurately.
-    proc_hist: Option<Histogram<u64>>,
+    proc_hist: Histogram<u64>,
     pub(crate) iter: u32,
 }
 
@@ -277,22 +249,18 @@ pub(crate) fn channel_to_json(
 
     let mut proc_percentiles = HashMap::new();
     let count_only = stats.proc_sampled_count == 0 && stats.received_count > 0;
-    let proc_avg = if stats.has_proc_hist() {
-        for &p in percentiles {
-            let value = if count_only {
-                "-".to_string()
-            } else {
-                crate::output::format_duration(stats.proc_percentile_nanos(p))
-            };
-            proc_percentiles.insert(crate::output::format_percentile_key(p), value);
-        }
-        if count_only {
-            Some("-".to_string())
+    for &p in percentiles {
+        let value = if count_only {
+            "-".to_string()
         } else {
-            Some(crate::output::format_duration(stats.proc_avg_nanos()))
-        }
+            crate::output::format_duration(stats.proc_percentile_nanos(p))
+        };
+        proc_percentiles.insert(crate::output::format_percentile_key(p), value);
+    }
+    let proc_avg = if count_only {
+        "-".to_string()
     } else {
-        None
+        crate::output::format_duration(stats.proc_avg_nanos())
     };
 
     JsonChannelEntry {
@@ -310,12 +278,11 @@ pub(crate) fn channel_to_json(
         received_per_sec: stats.received_per_sec(now_ns),
         type_name: stats.type_name.to_string(),
         type_size: stats.type_size,
-        wrap: stats.wrap,
         queue_size: stats.queue_size,
         max_queue_size: stats.max_queue_size,
-        proc_avg,
+        proc_avg: Some(proc_avg),
         proc_percentiles,
-        proc_sampled_count: stats.has_proc_hist().then_some(stats.proc_sampled_count),
+        proc_sampled_count: Some(stats.proc_sampled_count),
         proc_histogram: histograms.then(|| stats.proc_histogram_base64()).flatten(),
         location: crate::lib_on::locations::location_for_key(stats.key),
         iter: stats.iter,
@@ -332,7 +299,6 @@ impl ChannelEntry {
         channel_type: ChannelType,
         type_name: &'static str,
         type_size: usize,
-        wrap: bool,
         iter: u32,
     ) -> Self {
         Self {
@@ -350,12 +316,11 @@ impl ChannelEntry {
             first_msg_ns: None,
             type_name,
             type_size,
-            wrap,
             queue_size: None,
             max_queue_size: None,
             proc_total_nanos: 0,
             proc_sampled_count: 0,
-            proc_hist: wrap.then(Self::new_histogram),
+            proc_hist: Self::new_histogram(),
             iter,
         }
     }
@@ -371,31 +336,26 @@ impl ChannelEntry {
 
     #[inline]
     fn record_proc(&mut self, nanos: u64) {
-        if let Some(ref mut hist) = self.proc_hist {
-            self.proc_sampled_count += 1;
-            self.proc_total_nanos += nanos;
-            hist.record(nanos.clamp(Self::LOW_NS, Self::HIGH_NS))
-                .unwrap();
-        }
-    }
-
-    pub(crate) fn has_proc_hist(&self) -> bool {
-        self.proc_hist.is_some()
+        self.proc_sampled_count += 1;
+        self.proc_total_nanos += nanos;
+        self.proc_hist
+            .record(nanos.clamp(Self::LOW_NS, Self::HIGH_NS))
+            .unwrap();
     }
 
     pub(crate) fn proc_histogram_base64(&self) -> Option<String> {
         if self.proc_sampled_count == 0 {
             return None;
         }
-        crate::lib_on::histograms::histogram_base64(self.proc_hist.as_ref()?)
+        crate::lib_on::histograms::histogram_base64(&self.proc_hist)
     }
 
     /// Bucket projections of the sampled processing delays for the Prometheus
-    /// exporter (wrap mode only; empty without a proc histogram).
+    /// exporter (empty without samples).
     #[cfg(feature = "hotpath-prometheus-meta")]
     pub(crate) fn native_proc_buckets(&self, schema: i32) -> Vec<(i32, u64)> {
         crate::lib_on::native_histograms::native_buckets_opt(
-            self.proc_hist.as_ref(),
+            Some(&self.proc_hist),
             self.proc_sampled_count > 0,
             schema,
             crate::lib_on::native_histograms::NANOS_SCALE,
@@ -405,7 +365,7 @@ impl ChannelEntry {
     #[cfg(feature = "hotpath-prometheus-meta")]
     pub(crate) fn classic_proc_buckets(&self, boundaries: &[u64]) -> Vec<u64> {
         crate::lib_on::native_histograms::classic_buckets_opt(
-            self.proc_hist.as_ref(),
+            Some(&self.proc_hist),
             self.proc_sampled_count > 0,
             boundaries,
         )
@@ -456,12 +416,10 @@ impl ChannelEntry {
     }
 
     pub(crate) fn proc_percentile_nanos(&self, p: f64) -> u64 {
-        match &self.proc_hist {
-            Some(hist) if self.proc_sampled_count > 0 => {
-                hist.value_at_percentile(p.clamp(0.0, 100.0))
-            }
-            _ => 0,
+        if self.proc_sampled_count == 0 {
+            return 0;
         }
+        self.proc_hist.value_at_percentile(p.clamp(0.0, 100.0))
     }
 
     /// Current depth is counts-derived (`sent - received`), exact once the channel
@@ -549,27 +507,15 @@ pub(crate) enum ChannelEvent {
         channel_type: ChannelType,
         type_name: &'static str,
         type_size: usize,
-        wrap: bool,
         /// `true` when the registration opted into per-instance entries
         /// (`iter = true`); gates the display-suffix scan.
         iter_mode: bool,
     },
     /// A repeat default-mode registration at an already-known call site. The
     /// first instance is counted by `Created`; each later one sends this
-    /// instead. `wrap` is carried so a placeholder materialized ahead of
-    /// `Created` records wrap-only stats immediately.
+    /// instead.
     Instance {
         id: u32,
-        wrap: bool,
-    },
-    MessageSent {
-        id: u32,
-        log: Option<String>,
-        timestamp: Instant,
-    },
-    MessageReceived {
-        id: u32,
-        timestamp: Instant,
     },
     /// `timestamp` is `None` for messages unsampled under time sampling;
     /// the worker stamps those at drain time.
@@ -591,7 +537,7 @@ pub(crate) enum ChannelEvent {
         id: u32,
     },
     /// Messages left queued in an instance when its second endpoint dropped;
-    /// they can never be received. Emitted by wrap-mode endpoints only.
+    /// they can never be received.
     Abandoned {
         id: u32,
         count: u64,
@@ -616,10 +562,9 @@ pub(crate) use crate::lib_on::hotpath_guard::LOGS_LIMIT;
 
 /// Entry for events that arrive ahead of their `Created` (sweeps only preserve
 /// per-thread order, so another thread's data events can be drained first).
-/// `Created` backfills the metadata; `wrap` is inferred from the event variant
-/// so wrap-only stats (queue depth, processing histogram) record immediately.
-fn placeholder_channel_entry(id: u32, wrap: bool) -> ChannelEntry {
-    ChannelEntry::new(id, "", "", None, ChannelType::Pending, "", 0, wrap, 0)
+/// `Created` backfills the metadata.
+fn placeholder_channel_entry(id: u32) -> ChannelEntry {
+    ChannelEntry::new(id, "", "", None, ChannelType::Pending, "", 0, 0)
 }
 
 fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent) {
@@ -632,7 +577,6 @@ fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent)
             channel_type,
             type_name,
             type_size,
-            wrap,
             iter_mode,
         } => {
             // The O(n) same-site scan only has meaning for per-instance
@@ -646,72 +590,25 @@ fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent)
             let entry = state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, wrap));
+                .or_insert_with(|| placeholder_channel_entry(id));
             entry.key = key;
             entry.source = source;
             entry.label = display_label;
             entry.channel_type = channel_type;
             entry.type_name = type_name;
             entry.type_size = type_size;
-            entry.wrap = wrap;
             entry.iter = iter;
             entry.instances += 1;
             entry.refresh_queue();
-            if wrap && entry.proc_hist.is_none() {
-                entry.proc_hist = Some(ChannelEntry::new_histogram());
-            }
             state.logs.entry(id).or_insert_with(ChannelEntryLogs::new);
         }
-        ChannelEvent::Instance { id, wrap } => {
+        ChannelEvent::Instance { id } => {
             let entry = state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, wrap));
+                .or_insert_with(|| placeholder_channel_entry(id));
             entry.instances += 1;
             entry.refresh_queue();
-        }
-        ChannelEvent::MessageSent { id, log, timestamp } => {
-            let ts_ns = timestamp_nanos(timestamp);
-            let channel_stats = state
-                .stats
-                .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, false));
-            channel_stats.sent_count += 1;
-            channel_stats.record_activity(ts_ns);
-            let sent_count = channel_stats.sent_count;
-
-            let entry_logs = state.logs.entry(id).or_insert_with(ChannelEntryLogs::new);
-            let limit = *LOGS_LIMIT;
-            if entry_logs.sent_logs.len() >= limit {
-                entry_logs.sent_logs.pop_front();
-            }
-            entry_logs.sent_logs.push_back(DataFlowLogEntry::new(
-                sent_count, ts_ns, log, None, None, None,
-            ));
-        }
-        ChannelEvent::MessageReceived { id, timestamp } => {
-            let ts_ns = timestamp_nanos(timestamp);
-            let channel_stats = state
-                .stats
-                .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, false));
-            channel_stats.received_count += 1;
-            channel_stats.record_activity(ts_ns);
-            let received_count = channel_stats.received_count;
-
-            let entry_logs = state.logs.entry(id).or_insert_with(ChannelEntryLogs::new);
-            let limit = *LOGS_LIMIT;
-            if entry_logs.received_logs.len() >= limit {
-                entry_logs.received_logs.pop_front();
-            }
-            entry_logs.received_logs.push_back(DataFlowLogEntry::new(
-                received_count,
-                ts_ns,
-                None,
-                None,
-                None,
-                None,
-            ));
         }
         ChannelEvent::WrapMessageSent {
             id,
@@ -729,7 +626,7 @@ fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent)
             let channel_stats = state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, true));
+                .or_insert_with(|| placeholder_channel_entry(id));
             channel_stats.sent_count += 1;
             channel_stats.record_activity(ts_ns);
             channel_stats.record_queue(queue_len);
@@ -762,7 +659,7 @@ fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent)
             let channel_stats = state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, true));
+                .or_insert_with(|| placeholder_channel_entry(id));
             channel_stats.received_count += 1;
             channel_stats.record_activity(ts_ns);
             channel_stats.record_queue(queue_len);
@@ -789,14 +686,14 @@ fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent)
             state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, false))
+                .or_insert_with(|| placeholder_channel_entry(id))
                 .closed_instances += 1;
         }
         ChannelEvent::Abandoned { id, count } => {
             let channel_stats = state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, true));
+                .or_insert_with(|| placeholder_channel_entry(id));
             channel_stats.abandoned_count += count;
             // No further events arrive for the dead instance, so refresh the
             // displayed depth here instead of waiting for another send/receive.
@@ -806,7 +703,7 @@ fn process_channel_event(state: &mut ChannelsInternalState, event: ChannelEvent)
             state
                 .stats
                 .entry(id)
-                .or_insert_with(|| placeholder_channel_entry(id, false))
+                .or_insert_with(|| placeholder_channel_entry(id))
                 .notified = true;
         }
     }
@@ -912,45 +809,15 @@ pub(crate) fn extract_filename(path: &str) -> String {
     }
 }
 
-/// Trait for instrumenting channels.
-///
-/// This trait is not intended for direct use. Use the `channel!` macro instead.
-#[doc(hidden)]
-pub trait InstrumentChannelProxy {
-    type Output;
-    fn instrument(
-        self,
-        source: &'static str,
-        label: Option<String>,
-        capacity: Option<usize>,
-        iter: bool,
-    ) -> Self::Output;
-}
-
-/// Trait for instrumenting channels with message logging.
-///
-/// This trait is not intended for direct use. Use the `channel!` macro with `log = true` instead.
-#[doc(hidden)]
-pub trait InstrumentChannelProxyLog {
-    type Output;
-    fn instrument_log(
-        self,
-        source: &'static str,
-        label: Option<String>,
-        capacity: Option<usize>,
-        iter: bool,
-    ) -> Self::Output;
-}
-
 /// Trait for instrumenting channels by wrapping their endpoints directly.
 ///
 /// Returns wrapper types (`hotpath_meta::wrap::<backend>::{Sender, Receiver}`) instead of
-/// the original channel types, so queue depth is measured exactly with no forwarder.
-/// This is the default mode of the `channel!` macro; not intended for direct use.
+/// the original channel types, so queue depth is measured exactly. Not intended for
+/// direct use; the `channel!` macro dispatches here.
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
-    message = "channel type `{Self}` cannot be instrumented by the default `channel!` mode",
-    note = "this backend is forwarder-only; pass `proxy = true`, e.g. `channel!(expr, proxy = true)`"
+    message = "channel type `{Self}` cannot be instrumented by `channel!`",
+    note = "supported: `(Sender, Receiver)` tuples from std, crossbeam, flume, async-channel, tokio (mpsc, oneshot) and futures_channel (mpsc, oneshot)"
 )]
 pub trait InstrumentChannelWrap {
     type Output;
@@ -969,8 +836,8 @@ pub trait InstrumentChannelWrap {
 /// `log = true`.
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
-    message = "channel type `{Self}` cannot be instrumented by the default `channel!` mode",
-    note = "this backend is forwarder-only; pass `proxy = true`, e.g. `channel!(expr, proxy = true, log = true)`"
+    message = "channel type `{Self}` cannot be instrumented by `channel!`",
+    note = "supported: `(Sender, Receiver)` tuples from std, crossbeam, flume, async-channel, tokio (mpsc, oneshot) and futures_channel (mpsc, oneshot); `log = true` needs `T: Debug`"
 )]
 pub trait InstrumentChannelWrapLog {
     type Output;
@@ -983,24 +850,14 @@ pub trait InstrumentChannelWrapLog {
     ) -> Self::Output;
 }
 
-cfg_if::cfg_if! {
-    if #[cfg(any(feature = "tokio", feature = "futures", feature = "async-channel", feature = "flume"))] {
-        pub(crate) static RT: std::sync::LazyLock<tokio::runtime::Runtime> = std::sync::LazyLock::new(|| {
-            tokio::runtime::Builder::new_multi_thread()
-                .build()
-                .unwrap()
-        });
-    }
-}
-
 /// Instrument a channel creation for profiling.
 ///
-/// By default the macro **wraps the endpoints** (`wrap` mode): it returns
+/// The macro **wraps the endpoints**: it returns
 /// `hotpath_meta::wrap::<backend>::{Sender, Receiver}` instead of the raw channel types and
-/// measures exact queue depth plus send->receive latency, with no forwarder task.
+/// measures exact queue depth plus send->receive latency inline.
 ///
-/// Optional parameters: `label`, `log = true`, `capacity`, `proxy = true`, `iter = true`
-/// (in any order). `log = true` requires `Debug` on the message type.
+/// Optional parameters: `label`, `log = true`, `capacity`, `iter = true` (in any
+/// order). `log = true` requires `Debug` on the message type.
 ///
 /// # Call-site aggregation and `iter = true`
 ///
@@ -1029,7 +886,7 @@ cfg_if::cfg_if! {
 /// number of channels ever created, so prefer the default aggregation for
 /// call sites with unbounded instance churn.
 ///
-/// # Default (wrap) mode
+/// # Inline construction
 ///
 /// The channel expression **must be constructed inline**, e.g.
 /// `channel!(crossbeam_channel::unbounded::<T>())`. The wrapper rebuilds the inner channel
@@ -1037,24 +894,15 @@ cfg_if::cfg_if! {
 /// before wrapping is orphaned and its messages are silently dropped. Clone the returned
 /// wrapper endpoints instead.
 ///
-/// Bounded `std::sync::mpsc` (`sync_channel`) cannot recover its capacity from the
-/// endpoint, so `capacity = N` is required, e.g.
+/// Bounded `std::sync::mpsc` (`sync_channel`) and bounded `futures_channel::mpsc` cannot
+/// recover their capacity from the endpoint, so `capacity = N` is required, e.g.
 /// `channel!(std::sync::mpsc::sync_channel::<T>(100), capacity = 100)`. **The value must
-/// match the `sync_channel(N)` argument** - wrap mode rebuilds the inner channel from
+/// match the constructor argument** - the wrapper rebuilds the inner channel from
 /// `capacity`, so a mismatch silently changes backpressure (and only in profiled builds,
-/// since with `hotpath-meta` off `channel!` returns your original channel untouched). std
-/// exposes no capacity accessor, so keep the two numbers equal. Unbounded std, crossbeam,
+/// since with `hotpath-meta` off `channel!` returns your original channel untouched). Neither
+/// exposes a capacity accessor, so keep the two numbers equal. Unbounded std, crossbeam,
 /// flume, tokio and async-channel wrappers recover the bound from the endpoint and need no
 /// `capacity`.
-///
-/// # `proxy = true` (forwarder mode)
-///
-/// Passing `proxy = true` selects the forwarder-based mode: the original endpoint types are
-/// preserved (type-transparent) and a background task/thread relays every message through a
-/// second channel. This is the only mode available for backends without a wrap
-/// implementation (`futures_channel`, `tokio::sync::oneshot`); using them without
-/// `proxy = true` is a compile error that points you here. `capacity` is required for
-/// `futures_channel::mpsc` bounded channels.
 ///
 /// # Examples
 ///
@@ -1070,7 +918,6 @@ cfg_if::cfg_if! {
 /// ```
 #[macro_export]
 macro_rules! channel {
-    // Default: wrap mode. `channel!(expr)` -> endpoint-wrapping instrumentation.
     ($expr:expr) => {{
         const CHANNEL_ID: &'static str = concat!(file!(), ":", line!(), ":", column!());
         $crate::__register_location!(CHANNEL_ID);
@@ -1078,46 +925,37 @@ macro_rules! channel {
     }};
 
     // Any argument list is parsed order-independently by the muncher below. Slots are
-    // `label capacity log proxy iter`; `label`/`capacity`/`iter` are stored as
-    // ready-to-use expression tokens so the dispatch only branches on `log` x `proxy`.
+    // `label capacity log iter`; `label`/`capacity`/`iter` are stored as
+    // ready-to-use expression tokens so the dispatch only branches on `log`.
     // `CHANNEL_ID` is captured once here so `file!()`/`line!()` resolve to the user's
     // call site.
     ($expr:expr, $($rest:tt)*) => {{
         const CHANNEL_ID: &'static str = concat!(file!(), ":", line!(), ":", column!());
         $crate::__register_location!(CHANNEL_ID);
-        $crate::channel!(@munch CHANNEL_ID, $expr ; (None) (None) [nolog] [wrap] (false) ; $($rest)*)
+        $crate::channel!(@munch CHANNEL_ID, $expr ; (None) (None) [nolog] (false) ; $($rest)*)
     }};
 
-    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $proxy:tt $it:tt ;) => {
-        $crate::channel!(@dispatch $id, $e ; $lbl $cap $log $proxy $it)
+    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $it:tt ;) => {
+        $crate::channel!(@dispatch $id, $e ; $lbl $cap $log $it)
     };
-    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $proxy:tt $it:tt ; proxy = true $(, $($r:tt)*)?) => {
-        $crate::channel!(@munch $id, $e ; $lbl $cap $log [proxy] $it ; $($($r)*)?)
+    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $it:tt ; label = $l:expr $(, $($r:tt)*)?) => {
+        $crate::channel!(@munch $id, $e ; (Some($l.to_string())) $cap $log $it ; $($($r)*)?)
     };
-    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $proxy:tt $it:tt ; label = $l:expr $(, $($r:tt)*)?) => {
-        $crate::channel!(@munch $id, $e ; (Some($l.to_string())) $cap $log $proxy $it ; $($($r)*)?)
+    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $it:tt ; capacity = $c:expr $(, $($r:tt)*)?) => {
+        $crate::channel!(@munch $id, $e ; $lbl (Some($c)) $log $it ; $($($r)*)?)
     };
-    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $proxy:tt $it:tt ; capacity = $c:expr $(, $($r:tt)*)?) => {
-        $crate::channel!(@munch $id, $e ; $lbl (Some($c)) $log $proxy $it ; $($($r)*)?)
+    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $it:tt ; log = true $(, $($r:tt)*)?) => {
+        $crate::channel!(@munch $id, $e ; $lbl $cap [log] $it ; $($($r)*)?)
     };
-    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $proxy:tt $it:tt ; log = true $(, $($r:tt)*)?) => {
-        $crate::channel!(@munch $id, $e ; $lbl $cap [log] $proxy $it ; $($($r)*)?)
-    };
-    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $proxy:tt $it:tt ; iter = true $(, $($r:tt)*)?) => {
-        $crate::channel!(@munch $id, $e ; $lbl $cap $log $proxy (true) ; $($($r)*)?)
+    (@munch $id:ident, $e:expr ; $lbl:tt $cap:tt $log:tt $it:tt ; iter = true $(, $($r:tt)*)?) => {
+        $crate::channel!(@munch $id, $e ; $lbl $cap $log (true) ; $($($r)*)?)
     };
 
-    (@dispatch $id:ident, $e:expr ; $lbl:tt $cap:tt [nolog] [wrap] $it:tt) => {
+    (@dispatch $id:ident, $e:expr ; $lbl:tt $cap:tt [nolog] $it:tt) => {
         $crate::InstrumentChannelWrap::instrument_wrap($e, $id, $lbl, $cap, $it)
     };
-    (@dispatch $id:ident, $e:expr ; $lbl:tt $cap:tt [log] [wrap] $it:tt) => {
+    (@dispatch $id:ident, $e:expr ; $lbl:tt $cap:tt [log] $it:tt) => {
         $crate::InstrumentChannelWrapLog::instrument_wrap_log($e, $id, $lbl, $cap, $it)
-    };
-    (@dispatch $id:ident, $e:expr ; $lbl:tt $cap:tt [nolog] [proxy] $it:tt) => {
-        $crate::InstrumentChannelProxy::instrument($e, $id, $lbl, $cap, $it)
-    };
-    (@dispatch $id:ident, $e:expr ; $lbl:tt $cap:tt [log] [proxy] $it:tt) => {
-        $crate::InstrumentChannelProxyLog::instrument_log($e, $id, $lbl, $cap, $it)
     };
 }
 
@@ -1208,7 +1046,6 @@ mod tests {
                 channel_type: ChannelType::Unbounded,
                 type_name: "u8",
                 type_size: 1,
-                wrap: true,
                 iter_mode: false,
             },
         );
@@ -1275,7 +1112,6 @@ mod tests {
                 channel_type: ChannelType::Unbounded,
                 type_name: "u8",
                 type_size: 1,
-                wrap: true,
                 iter_mode: false,
             },
         );
@@ -1288,8 +1124,8 @@ mod tests {
 
         // The late Instance belongs to a third, still-open channel: not fully
         // closed anymore.
-        process_channel_event(&mut state, ChannelEvent::Instance { id, wrap: true });
-        process_channel_event(&mut state, ChannelEvent::Instance { id, wrap: true });
+        process_channel_event(&mut state, ChannelEvent::Instance { id });
+        process_channel_event(&mut state, ChannelEvent::Instance { id });
         assert_eq!(state.stats[&id].instances, 3);
         assert_eq!(state.stats[&id].state(), ChannelState::Active);
 
@@ -1320,7 +1156,6 @@ mod tests {
                 channel_type: ChannelType::Oneshot,
                 type_name: "u8",
                 type_size: 1,
-                wrap: true,
                 iter_mode: false,
             },
         );
@@ -1365,11 +1200,10 @@ mod tests {
                 channel_type: ChannelType::Unbounded,
                 type_name: "u8",
                 type_size: 1,
-                wrap: true,
                 iter_mode: false,
             },
         );
-        process_channel_event(&mut state, ChannelEvent::Instance { id, wrap: true });
+        process_channel_event(&mut state, ChannelEvent::Instance { id });
 
         let entry = state.stats.get(&id).expect("channel registered");
         assert_eq!(entry.queue_size, Some(2), "combined depth after backfill");
@@ -1397,7 +1231,6 @@ mod tests {
                 channel_type: ChannelType::Bounded(1),
                 type_name: "u8",
                 type_size: 1,
-                wrap: true,
                 iter_mode: false,
             },
         );
@@ -1425,7 +1258,7 @@ mod tests {
 
         // Instance 2 holds one message: depth reflects only its message, and
         // the peak does not inherit the dead instance's deficit.
-        process_channel_event(&mut state, ChannelEvent::Instance { id, wrap: true });
+        process_channel_event(&mut state, ChannelEvent::Instance { id });
         process_channel_event(
             &mut state,
             ChannelEvent::WrapMessageSent {
@@ -1462,11 +1295,10 @@ mod tests {
                 channel_type: ChannelType::Unbounded,
                 type_name: "u8",
                 type_size: 1,
-                wrap: true,
                 iter_mode: false,
             },
         );
-        process_channel_event(&mut state, ChannelEvent::Instance { id, wrap: true });
+        process_channel_event(&mut state, ChannelEvent::Instance { id });
 
         // Two instances each hold one message; each reports its own len() of 1.
         let ts = Instant::now();
@@ -1508,7 +1340,6 @@ mod tests {
             channel_type: ChannelType::Unbounded,
             type_name: "u8",
             type_size: 1,
-            wrap: true,
             iter_mode: true,
         };
 
@@ -1532,23 +1363,13 @@ mod histogram_tests {
     use crate::channels::{ChannelEntry, ChannelType};
     use crate::lib_on::histograms::decode_histogram;
 
-    fn entry(wrap: bool) -> ChannelEntry {
-        ChannelEntry::new(
-            1,
-            "key",
-            "src",
-            None,
-            ChannelType::Unbounded,
-            "u8",
-            1,
-            wrap,
-            0,
-        )
+    fn entry() -> ChannelEntry {
+        ChannelEntry::new(1, "key", "src", None, ChannelType::Unbounded, "u8", 1, 0)
     }
 
     #[test]
     fn histogram_encodes_sampled_receives() {
-        let mut e = entry(true);
+        let mut e = entry();
         e.record_proc(1_000);
         e.record_proc(2_000);
 
@@ -1558,8 +1379,7 @@ mod histogram_tests {
     }
 
     #[test]
-    fn histogram_absent_without_samples_or_for_proxy_channels() {
-        assert!(entry(true).proc_histogram_base64().is_none());
-        assert!(entry(false).proc_histogram_base64().is_none());
+    fn histogram_absent_without_samples() {
+        assert!(entry().proc_histogram_base64().is_none());
     }
 }

@@ -628,6 +628,7 @@ impl HotpathGuard {
                                                     bucket_counts: s.classic_duration_buckets(
                                                         &crate::prometheus_server::FAST_LADDER_NS,
                                                     ),
+                                                    routes: crate::functions::raw_routes(&s.routes),
                                                 }
                                             })
                                             .collect();
@@ -1467,6 +1468,8 @@ impl Drop for HotpathGuard {
                             let total = server_data.len();
                             let reference_total: u64 =
                                 server_data.iter().map(|e| e.total_nanos).sum();
+                            let reference_alloc_bytes: u64 =
+                                server_data.iter().map(|e| e.alloc_bytes).sum();
                             let total_calls: u64 = server_data.iter().map(|e| e.count).sum();
                             let limit = apply_limit(total, self.server_limit);
                             report::report_server_table(
@@ -1474,6 +1477,7 @@ impl Drop for HotpathGuard {
                                 total,
                                 total_calls,
                                 reference_total,
+                                reference_alloc_bytes,
                                 &percentiles,
                                 report::ServerColumns::from_state(),
                                 &mut writer,

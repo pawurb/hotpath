@@ -1,8 +1,7 @@
 //! Endpoint-wrapping async-channel instrumentation for the `channel!` macro.
 //!
-//! Wraps the `Sender`/`Receiver` endpoints directly (unlike the forwarder-proxy in
-//! [`crate::channels::wrapper::asc`]): no extra task or proxy channel, so send/recv hit
-//! the real channel. `queue_len` is a snapshot taken right after each op via the exact
+//! Wraps the `Sender`/`Receiver` endpoints directly, so send/recv hit the real channel.
+//! `queue_len` is a snapshot taken right after each op via the exact
 //! `async_channel::Sender::len`/`Receiver::len` - exact single-threaded, may skew under
 //! concurrent endpoints.
 //!
@@ -34,7 +33,7 @@ use async_channel::{
 };
 
 use crate::channels::{
-    register_channel_wrap, send_channel_event, ChannelEvent, ChannelType, Instant,
+    register_channel, send_channel_event, ChannelEvent, ChannelType, Instant,
     InstrumentChannelWrap, InstrumentChannelWrapLog,
 };
 
@@ -269,7 +268,7 @@ fn build<T>(
 ) -> (Sender<T>, Receiver<T>) {
     let (orig_tx, _orig_rx) = inner;
     let ch_type = channel_type(&orig_tx);
-    let id = register_channel_wrap::<T>(source, label, ch_type, iter);
+    let id = register_channel::<T>(source, label, ch_type, iter);
     let closed = Arc::new(AtomicBool::new(false));
     // Aggregated instances share one msg-id sequence so ids stay unique
     // within the entry; iter-mode instances keep a local counter.
@@ -280,7 +279,7 @@ fn build<T>(
     };
 
     // Rebuild the inner channel to carry `(msg_id, send_ts, T)`. The caller's original
-    // channel is discarded (wrap mode is inline-only, see module docs); only its
+    // channel is discarded (the wrapper is inline-only, see module docs); only its
     // kind/capacity is copied.
     let (tx, rx) = match ch_type {
         ChannelType::Bounded(cap) => async_channel::bounded::<Payload<T>>(cap),
