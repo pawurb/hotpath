@@ -49,7 +49,7 @@ pub mod tests {
         let channels = parse_channels(&stdout);
 
         for label in ["a", "b", "c", "d", "e", "f", "g", "h"] {
-            let entry = channels
+            channels
                 .data
                 .iter()
                 .find(|c| c.label == label)
