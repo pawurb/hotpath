@@ -236,6 +236,20 @@ pub mod wrap {
         pub use async_channel::{Receiver, Sender};
     }
 
+    /// Instrumented `futures_channel::oneshot` endpoints for the default `channel!`
+    /// mode. With `hotpath` enabled these are the instrumented wrappers; otherwise
+    /// `channel!` is a no-op and the endpoints are the raw futures types, so the
+    /// alias resolves the same way regardless of feature configuration.
+    #[cfg(feature = "futures")]
+    pub mod futures_channel {
+        pub mod oneshot {
+            #[cfg(feature = "hotpath")]
+            pub use crate::lib_on::channels::wrapper::ftc_oneshot_wrap::{Receiver, Sender};
+            #[cfg(not(feature = "hotpath"))]
+            pub use futures_channel::oneshot::{Receiver, Sender};
+        }
+    }
+
     /// Instrumented reqwest 0.12 client for `http!(...)`. With `hotpath`
     /// enabled `Client` is reqwest-middleware's `ClientWithMiddleware`;
     /// otherwise `http!` is a no-op and `Client` is the raw `reqwest::Client`,

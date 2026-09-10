@@ -75,6 +75,7 @@ pub mod tests {
             "\"label\": \"unbounded\"",
             "\"label\": \"bounded\"",
             "\"label\": \"oneshot\"",
+            "\"state\": \"notified\"",
         ];
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -172,9 +173,9 @@ pub mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         let sep = path_sep();
-        let iter_64 = format!("examples{sep}iter_ftc.rs:64");
-        let iter_64_2 = format!("examples{sep}iter_ftc.rs:64-2");
-        let iter_64_3 = format!("examples{sep}iter_ftc.rs:64-3");
+        let iter_65 = format!("examples{sep}iter_ftc.rs:65");
+        let iter_65_2 = format!("examples{sep}iter_ftc.rs:65-2");
+        let iter_65_3 = format!("examples{sep}iter_ftc.rs:65-3");
         let all_expected = [
             "Actor 1",
             "Actor 1-2",
@@ -182,9 +183,9 @@ pub mod tests {
             "bounded",
             "bounded-2",
             "bounded-3",
-            iter_64.as_str(),
-            iter_64_2.as_str(),
-            iter_64_3.as_str(),
+            iter_65.as_str(),
+            iter_65_2.as_str(),
+            iter_65_3.as_str(),
         ];
 
         for expected in all_expected {

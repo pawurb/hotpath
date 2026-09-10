@@ -81,7 +81,6 @@ fn main() {
         // Channel 8: Oneshot early - fires at 5 seconds
         let (tx_oneshot_early, rx_oneshot_early) = hotpath::channel!(
             futures_channel::oneshot::channel::<String>(),
-            proxy = true,
             label = "oneshot-early",
             log = true
         );
@@ -89,7 +88,6 @@ fn main() {
         // Channel 9: Oneshot mid - fires at 15 seconds
         let (tx_oneshot_mid, rx_oneshot_mid) = hotpath::channel!(
             futures_channel::oneshot::channel::<u32>(),
-            proxy = true,
             label = "oneshot-mid",
             log = true
         );
@@ -97,7 +95,6 @@ fn main() {
         // Channel 10: Oneshot late - fires at 25 seconds
         let (tx_oneshot_late, rx_oneshot_late) = hotpath::channel!(
             futures_channel::oneshot::channel::<i64>(),
-            proxy = true,
             label = "oneshot-late",
             log = true
         );
