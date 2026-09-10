@@ -100,7 +100,7 @@ Wrap at the creation site; all wrappers accept optional `label = "name"` and (wh
 ```rust
 // Channels (tokio mpsc/oneshot, std mpsc, crossbeam, flume, async-channel, futures_channel)
 let (tx, rx) = hotpath::channel!(mpsc::channel::<String>(100), label = "jobs", log = true);
-// futures_channel needs proxy mode (compile error otherwise);
+// futures_channel::mpsc needs proxy mode (compile error otherwise);
 // bounded std sync_channel and futures_channel mpsc also need capacity = N (must match):
 let (tx, rx) = hotpath::channel!(futures_channel::mpsc::channel::<String>(10), proxy = true, capacity = 10);
 

@@ -12,6 +12,8 @@ pub(crate) mod flume;
 pub(crate) mod flume_wrap;
 #[cfg(feature = "futures")]
 pub(crate) mod ftc;
+#[cfg(feature = "futures")]
+pub(crate) mod ftc_oneshot_wrap;
 pub(crate) mod std;
 pub(crate) mod std_wrap;
 #[cfg(feature = "tokio")]

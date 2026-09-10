@@ -62,6 +62,7 @@ The same prefix works for every wrap-capable library:
 - `hotpath::wrap::crossbeam_channel::{Sender, Receiver}`
 - `hotpath::wrap::flume::{Sender, Receiver}`
 - `hotpath::wrap::async_channel::{Sender, Receiver}`
+- `hotpath::wrap::futures_channel::oneshot::{Sender, Receiver}`
 
 This is purely to keep the compiler police happy: the `hotpath::wrap::` types are noop unless the `hotpath` feature is enabled. With the feature off they are plain re-exports of the original endpoints (zero overhead, **identical behavior**); with the feature on they resolve to the instrumented wrappers. Either way the field type lines up with what the macro returns, so the same code compiles in both configurations.
 
@@ -169,7 +170,7 @@ let (tx, rx) = hotpath::channel!(mpsc::channel::<String>(100), proxy = true);
 let (tx, rx) = hotpath::channel!(futures_channel::mpsc::channel::<i32>(10), proxy = true, capacity = 10);
 ```
 
-Its only advantage is that it returns the original endpoint types unchanged (see [Wrapped types](#wrapped-types)), and it is required for the one backend that has no wrap implementation - `futures_channel` (mpsc and oneshot). Calling `channel!` on it without `proxy = true` is a compile error that tells you to add it.
+Its only advantage is that it returns the original endpoint types unchanged (see [Wrapped types](#wrapped-types)), and it is required for the one backend that has no wrap implementation - `futures_channel::mpsc`. Calling `channel!` on it without `proxy = true` is a compile error that tells you to add it.
 
 The trade-offs are significant. It **cannot measure send-receive latency accurately**: events are stamped inside the forwarder, in the middle of the pipeline, so `proc_avg`/percentiles and exact queue depth are omitted. Relaying every message through an extra channel and task also costs more - for some channel libraries up to **6x higher overhead** than the default wrap mode. Sent/received counts are observed at the proxy boundary rather than at the final consumer, and `try_send` may behave slightly differently since the proxy adds one slot of extra capacity. Prefer the default wrap mode unless you need the original endpoint types.
 

@@ -87,7 +87,7 @@ cargo run -p test-rw-lock-async-lock --example benchmark_rw_lock_async_lock --fe
 
 #### Channels
 
-Each benchmark runs three modes in a single command and prints their per-op cost side by side: an uninstrumented **baseline** (raw channel), the `proxy = true` **forwarder**, and the default **wrap** mode (endpoint wrapping). The delta vs baseline isolates the instrumentation overhead, so you can compare wrap-vs-forwarder directly. `futures_channel` has no wrap implementation, so its benchmark shows baseline and proxy only.
+Each benchmark runs three modes in a single command and prints their per-op cost side by side: an uninstrumented **baseline** (raw channel), the `proxy = true` **forwarder**, and the default **wrap** mode (endpoint wrapping). The delta vs baseline isolates the instrumentation overhead, so you can compare wrap-vs-forwarder directly. `futures_channel::mpsc` has no wrap implementation, so its benchmark shows baseline and proxy only.
 
 ```bash
 cargo run -p test-channels-std --example benchmark_channel_std --features hotpath --release

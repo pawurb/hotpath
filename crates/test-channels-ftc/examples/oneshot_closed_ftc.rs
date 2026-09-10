@@ -13,7 +13,6 @@ fn main() {
 
         let (tx, rx) = hotpath::channel!(
             futures_channel::oneshot::channel::<String>(),
-            proxy = true,
             label = "oneshot-closed"
         );
 

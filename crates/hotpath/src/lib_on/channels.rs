@@ -1065,7 +1065,7 @@ cfg_if::cfg_if! {
 /// Passing `proxy = true` selects the forwarder-based mode: the original endpoint types are
 /// preserved (type-transparent) and a background task/thread relays every message through a
 /// second channel. This is the only mode available for backends without a wrap
-/// implementation (`futures_channel`); using them without `proxy = true` is a
+/// implementation (`futures_channel::mpsc`); using them without `proxy = true` is a
 /// compile error that points you here. `capacity` is required for
 /// `futures_channel::mpsc` bounded channels.
 ///
