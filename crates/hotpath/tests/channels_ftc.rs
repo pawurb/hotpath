@@ -173,9 +173,9 @@ pub mod tests {
         let stdout = String::from_utf8_lossy(&output.stdout);
 
         let sep = path_sep();
-        let iter_65 = format!("examples{sep}iter_ftc.rs:65");
-        let iter_65_2 = format!("examples{sep}iter_ftc.rs:65-2");
-        let iter_65_3 = format!("examples{sep}iter_ftc.rs:65-3");
+        let iter_63 = format!("examples{sep}iter_ftc.rs:63");
+        let iter_63_2 = format!("examples{sep}iter_ftc.rs:63-2");
+        let iter_63_3 = format!("examples{sep}iter_ftc.rs:63-3");
         let all_expected = [
             "Actor 1",
             "Actor 1-2",
@@ -183,9 +183,9 @@ pub mod tests {
             "bounded",
             "bounded-2",
             "bounded-3",
-            iter_65.as_str(),
-            iter_65_2.as_str(),
-            iter_65_3.as_str(),
+            iter_63.as_str(),
+            iter_63_2.as_str(),
+            iter_63_3.as_str(),
         ];
 
         for expected in all_expected {

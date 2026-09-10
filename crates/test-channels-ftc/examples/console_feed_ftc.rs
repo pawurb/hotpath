@@ -21,7 +21,6 @@ fn main() {
         // Channel 1: Fast data stream - unbounded, rapid messages
         let (tx_fast, mut rx_fast) = hotpath::channel!(
             futures_channel::mpsc::unbounded::<String>(),
-            proxy = true,
             label = "fast-stream",
             log = true
         );
@@ -29,7 +28,6 @@ fn main() {
         // Channel 2: Slow consumer - bounded(5), will back up!
         let (mut tx_slow, mut rx_slow) = hotpath::channel!(
             futures_channel::mpsc::channel::<String>(5),
-            proxy = true,
             label = "slow-consumer",
             capacity = 5,
             log = true
@@ -38,7 +36,6 @@ fn main() {
         // Channel 3: Burst traffic - bounded(10), bursts every 3 seconds
         let (mut tx_burst, mut rx_burst) = hotpath::channel!(
             futures_channel::mpsc::channel::<u64>(10),
-            proxy = true,
             label = "burst-traffic",
             capacity = 10,
             log = true
@@ -47,7 +44,6 @@ fn main() {
         // Channel 4: Gradual flow - bounded(20), increasing rate
         let (mut tx_gradual, mut rx_gradual) = hotpath::channel!(
             futures_channel::mpsc::channel::<f64>(20),
-            proxy = true,
             label = "gradual-flow",
             capacity = 20,
             log = true
@@ -56,7 +52,6 @@ fn main() {
         // Channel 5: Dropped early - unbounded, producer dies at 10s
         let (tx_drop_early, mut rx_drop_early) = hotpath::channel!(
             futures_channel::mpsc::unbounded::<bool>(),
-            proxy = true,
             label = "dropped-early",
             log = true
         );
@@ -64,7 +59,6 @@ fn main() {
         // Channel 6: Consumer dies - bounded(8), consumer stops at 15s
         let (mut tx_consumer_dies, mut rx_consumer_dies) = hotpath::channel!(
             futures_channel::mpsc::channel::<Vec<u8>>(8),
-            proxy = true,
             label = "consumer-dies",
             capacity = 8,
             log = true
@@ -73,7 +67,6 @@ fn main() {
         // Channel 7: Steady stream - unbounded, consistent 500ms rate
         let (tx_steady, mut rx_steady) = hotpath::channel!(
             futures_channel::mpsc::unbounded::<&str>(),
-            proxy = true,
             label = "steady-stream",
             log = true
         );
@@ -101,11 +94,8 @@ fn main() {
 
         println!("Creating 3 bounded iter channels...");
         for i in 0..3 {
-            let (mut tx, mut rx) = hotpath::channel!(
-                futures_channel::mpsc::channel::<u32>(5),
-                proxy = true,
-                capacity = 5
-            );
+            let (mut tx, mut rx) =
+                hotpath::channel!(futures_channel::mpsc::channel::<u32>(5), capacity = 5);
 
             smol::spawn(async move {
                 for j in 0..5 {

@@ -236,12 +236,23 @@ pub mod wrap {
         pub use async_channel::{Receiver, Sender};
     }
 
-    /// Instrumented `futures_channel::oneshot` endpoints for the default `channel!`
-    /// mode. With `hotpath` enabled these are the instrumented wrappers; otherwise
+    /// Instrumented `futures_channel` endpoints for the default `channel!` mode.
+    /// With `hotpath` enabled these are the instrumented wrappers; otherwise
     /// `channel!` is a no-op and the endpoints are the raw futures types, so the
     /// alias resolves the same way regardless of feature configuration.
     #[cfg(feature = "futures")]
     pub mod futures_channel {
+        pub mod mpsc {
+            #[cfg(feature = "hotpath")]
+            pub use crate::lib_on::channels::wrapper::ftc_wrap::{
+                Receiver, Sender, TrySendError, UnboundedReceiver, UnboundedSender,
+            };
+            #[cfg(not(feature = "hotpath"))]
+            pub use futures_channel::mpsc::{
+                Receiver, Sender, TrySendError, UnboundedReceiver, UnboundedSender,
+            };
+        }
+
         pub mod oneshot {
             #[cfg(feature = "hotpath")]
             pub use crate::lib_on::channels::wrapper::ftc_oneshot_wrap::{Receiver, Sender};

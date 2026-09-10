@@ -71,7 +71,7 @@ The default [wrap mode](./data_flow.md) intercepts `send`/`recv` inline and adds
 | `async_channel` | +63 ns | +6.4 µs |
 | `flume` | +86 ns | +6.6 µs |
 | `tokio::sync::mpsc` | +88 ns | +5.8 µs |
-| `futures_channel::mpsc` | no wrap support | +11.0 µs |
+| `futures_channel::mpsc` | +52 ns | +10.4 µs |
 
 The legacy [`proxy = true` mode](./data_flow.md#legacy-proxy--true-mode) relays every message through an extra channel and a forwarder task, which multiplies the per-message cost of most backends by ~4-11x (crossbeam is the outlier where the forwarder happens to be nearly free). Prefer the default wrap mode unless you need the original endpoint types.
 

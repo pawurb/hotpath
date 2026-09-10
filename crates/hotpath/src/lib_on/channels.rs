@@ -963,7 +963,7 @@ pub trait InstrumentChannelProxyLog {
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
     message = "channel type `{Self}` cannot be instrumented by the default `channel!` mode",
-    note = "this backend is forwarder-only; pass `proxy = true`, e.g. `channel!(expr, proxy = true)`"
+    note = "supported: `(Sender, Receiver)` tuples from std, crossbeam, flume, async-channel, tokio (mpsc, oneshot) and futures_channel (mpsc, oneshot)"
 )]
 pub trait InstrumentChannelWrap {
     type Output;
@@ -983,7 +983,7 @@ pub trait InstrumentChannelWrap {
 #[doc(hidden)]
 #[diagnostic::on_unimplemented(
     message = "channel type `{Self}` cannot be instrumented by the default `channel!` mode",
-    note = "this backend is forwarder-only; pass `proxy = true`, e.g. `channel!(expr, proxy = true, log = true)`"
+    note = "supported: `(Sender, Receiver)` tuples from std, crossbeam, flume, async-channel, tokio (mpsc, oneshot) and futures_channel (mpsc, oneshot); `log = true` needs `T: Debug`"
 )]
 pub trait InstrumentChannelWrapLog {
     type Output;
@@ -1050,13 +1050,13 @@ cfg_if::cfg_if! {
 /// before wrapping is orphaned and its messages are silently dropped. Clone the returned
 /// wrapper endpoints instead.
 ///
-/// Bounded `std::sync::mpsc` (`sync_channel`) cannot recover its capacity from the
-/// endpoint, so `capacity = N` is required, e.g.
+/// Bounded `std::sync::mpsc` (`sync_channel`) and bounded `futures_channel::mpsc` cannot
+/// recover their capacity from the endpoint, so `capacity = N` is required, e.g.
 /// `channel!(std::sync::mpsc::sync_channel::<T>(100), capacity = 100)`. **The value must
-/// match the `sync_channel(N)` argument** - wrap mode rebuilds the inner channel from
+/// match the constructor argument** - wrap mode rebuilds the inner channel from
 /// `capacity`, so a mismatch silently changes backpressure (and only in profiled builds,
-/// since with `hotpath` off `channel!` returns your original channel untouched). std
-/// exposes no capacity accessor, so keep the two numbers equal. Unbounded std, crossbeam,
+/// since with `hotpath` off `channel!` returns your original channel untouched). Neither
+/// exposes a capacity accessor, so keep the two numbers equal. Unbounded std, crossbeam,
 /// flume, tokio and async-channel wrappers recover the bound from the endpoint and need no
 /// `capacity`.
 ///
@@ -1064,10 +1064,8 @@ cfg_if::cfg_if! {
 ///
 /// Passing `proxy = true` selects the forwarder-based mode: the original endpoint types are
 /// preserved (type-transparent) and a background task/thread relays every message through a
-/// second channel. This is the only mode available for backends without a wrap
-/// implementation (`futures_channel::mpsc`); using them without `proxy = true` is a
-/// compile error that points you here. `capacity` is required for
-/// `futures_channel::mpsc` bounded channels.
+/// second channel. It cannot measure exact queue depth or send->receive latency and
+/// costs more per message; prefer the default mode unless you need the original types.
 ///
 /// # Examples
 ///
